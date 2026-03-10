@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException
+import os
+import shutil
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
@@ -6,6 +8,7 @@ from typing import List
 from app.db.database import engine, SessionLocal
 from app.db import models
 from app.api import schemas
+from app.services.extractor_xml import extraer_datos_factura
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -61,6 +64,44 @@ def crear_reembolso(reembolso: schemas.ReembolsoCreate, db: Session = Depends(ge
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error al guardar: {str(e)}")
+    
+@app.post("/api/reembolsos/procesar-xml", response_model=schemas.ReembolsoResponse, status_code=201)
+async def procesar_factura_xml(
+    correo: str = Form(...),
+    archivo: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    ruta_temporal = f"temp_{archivo.filename}"
+    with open(ruta_temporal, "wb") as buffer:
+        shutil.copyfileobj(archivo.file, buffer)
+        
+    resultado = extraer_datos_factura(ruta_temporal)
+
+    if os.path.exists(ruta_temporal):
+        os.remove(ruta_temporal)
+
+    if resultado["status"] != "success":
+        raise HTTPException(status_code=400, detail=resultado["mensaje"])
+        
+    datos = resultado["datos"]
+
+    nuevo_reembolso = models.SolicitudReembolso(
+        uuid=datos["uuid"],
+        monto=datos["monto_total"],
+        correo_solicitante=correo,
+        nombre_proveedor=datos["nombre_emisor"],
+        estatus="PENDIENTE",
+        rfc_emisor=datos["rfc_emisor"]
+    )
+    
+    try:
+        db.add(nuevo_reembolso)
+        db.commit()
+        db.refresh(nuevo_reembolso)
+        return nuevo_reembolso
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error al guardar en Base de Datos: {str(e)}")
 
 @app.put("/api/reembolsos/{reembolso_id}/estatus", response_model=schemas.ReembolsoResponse)
 def actualizar_estatus(

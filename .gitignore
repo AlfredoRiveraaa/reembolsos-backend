@@ -11,3 +11,6 @@ __pycache__/
 
 # Configuración de VS Code
 .vscode/
+
+# Ignorar facturas de prueba
+*.xml

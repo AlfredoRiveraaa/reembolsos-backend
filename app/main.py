@@ -3,7 +3,7 @@ import shutil
 from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from app.db.database import engine, SessionLocal
 from app.db import models
@@ -69,6 +69,7 @@ def crear_reembolso(reembolso: schemas.ReembolsoCreate, db: Session = Depends(ge
 async def procesar_factura_xml(
     correo: str = Form(...),
     archivo: UploadFile = File(...),
+    pdfs: List[UploadFile] = File(default=[]),
     db: Session = Depends(get_db)
 ):
     ruta_temporal = f"temp_{archivo.filename}"
@@ -76,22 +77,33 @@ async def procesar_factura_xml(
         shutil.copyfileobj(archivo.file, buffer)
         
     resultado = extraer_datos_factura(ruta_temporal)
-
-    if os.path.exists(ruta_temporal):
-        os.remove(ruta_temporal)
-
+    if os.path.exists(ruta_temporal): os.remove(ruta_temporal)
+        
     if resultado["status"] != "success":
         raise HTTPException(status_code=400, detail=resultado["mensaje"])
         
     datos = resultado["datos"]
-
+    
+    ruta_carpeta_expediente = None
+    pdfs_validos = [p for p in pdfs if p.filename]
+    
+    if pdfs_validos:
+        ruta_carpeta_expediente = f"expedientes_pdf/{datos['uuid']}"
+        os.makedirs(ruta_carpeta_expediente, exist_ok=True)
+        
+        for pdf in pdfs_validos:
+            ruta_pdf_final = f"{ruta_carpeta_expediente}/{pdf.filename}"
+            with open(ruta_pdf_final, "wb") as buffer_pdf:
+                shutil.copyfileobj(pdf.file, buffer_pdf)
+    
     nuevo_reembolso = models.SolicitudReembolso(
         uuid=datos["uuid"],
         monto=datos["monto_total"],
         correo_solicitante=correo,
         nombre_proveedor=datos["nombre_emisor"],
         estatus="PENDIENTE",
-        rfc_emisor=datos["rfc_emisor"]
+        rfc_emisor=datos["rfc_emisor"],
+        link_expediente=ruta_carpeta_expediente 
     )
     
     try:
@@ -101,7 +113,7 @@ async def procesar_factura_xml(
         return nuevo_reembolso
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error al guardar en Base de Datos: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error BD: {str(e)}")
 
 @app.put("/api/reembolsos/{reembolso_id}/estatus", response_model=schemas.ReembolsoResponse)
 def actualizar_estatus(

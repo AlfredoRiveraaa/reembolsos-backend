@@ -1,5 +1,6 @@
 import os
 import shutil
+import uuid
 from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -72,12 +73,16 @@ async def procesar_factura_xml(
     pdfs: List[UploadFile] = File(default=[]),
     db: Session = Depends(get_db)
 ):
-    ruta_temporal = f"temp_{archivo.filename}"
+    id_unico = str(uuid.uuid4())
+    ruta_temporal = f"temp_{id_unico}_{archivo.filename}"
+    
     with open(ruta_temporal, "wb") as buffer:
         shutil.copyfileobj(archivo.file, buffer)
         
     resultado = extraer_datos_factura(ruta_temporal)
-    if os.path.exists(ruta_temporal): os.remove(ruta_temporal)
+    
+    if os.path.exists(ruta_temporal): 
+        os.remove(ruta_temporal)
         
     if resultado["status"] != "success":
         raise HTTPException(status_code=400, detail=resultado["mensaje"])

@@ -1,7 +1,7 @@
 import os
 import shutil
 import uuid
-from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Form
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -10,6 +10,7 @@ from app.db.database import engine, SessionLocal
 from app.db import models
 from app.api import schemas
 from app.services.extractor_xml import extraer_datos_factura
+from app.services.notificador import NotificadorCorreo
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -71,7 +72,8 @@ async def procesar_factura_xml(
     correo: str = Form(...),
     archivo: UploadFile = File(...),
     pdfs: List[UploadFile] = File(default=[]),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     id_unico = str(uuid.uuid4())
     ruta_temporal = f"temp_{id_unico}_{archivo.filename}"
@@ -115,6 +117,17 @@ async def procesar_factura_xml(
         db.add(nuevo_reembolso)
         db.commit()
         db.refresh(nuevo_reembolso)
+        
+        # ⚡ NUEVO: Enviar acuse en segundo plano (No hace esperar a la terminal)
+        background_tasks.add_task(
+            NotificadorCorreo.enviar_acuse_recibo,
+            correo_solicitante=correo,
+            uuid_factura=datos["uuid"],
+            monto=datos["monto_total"],
+            nombre_proveedor=datos["nombre_emisor"],
+            fecha_recepcion=nuevo_reembolso.fecha_recepcion
+        )
+        
         return nuevo_reembolso
     except Exception as e:
         db.rollback()
@@ -124,8 +137,9 @@ async def procesar_factura_xml(
 def actualizar_estatus(
     reembolso_id: int, 
     nuevo_estatus: str, 
-    mensaje_rechazo: str = None, 
-    db: Session = Depends(get_db)
+    comentarios_rh: str = None,
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     reembolso = db.query(models.SolicitudReembolso).filter(models.SolicitudReembolso.id == reembolso_id).first()
     
@@ -133,10 +147,30 @@ def actualizar_estatus(
         raise HTTPException(status_code=404, detail="Reembolso no encontrado")
     
     reembolso.estatus = nuevo_estatus.upper()
-    if mensaje_rechazo:
-        reembolso.mensaje_rechazo = mensaje_rechazo
+    
+    # Guardamos los comentarios en la base de datos (reutilizando tu columna)
+    if comentarios_rh:
+        reembolso.mensaje_rechazo = comentarios_rh
         
     db.commit()
     db.refresh(reembolso)
+    
+    # ⚡ NUEVO: Enviar notificación en segundo plano según el estatus
+    if reembolso.estatus == "VALIDADA":
+        background_tasks.add_task(
+            NotificadorCorreo.enviar_validacion,
+            correo_solicitante=reembolso.correo_solicitante,
+            uuid_factura=reembolso.uuid,
+            monto=float(reembolso.monto),
+            comentarios_rh=comentarios_rh
+        )
+    elif reembolso.estatus == "RECHAZADA":
+        background_tasks.add_task(
+            NotificadorCorreo.enviar_rechazo,
+            correo_solicitante=reembolso.correo_solicitante,
+            uuid_factura=reembolso.uuid,
+            monto=float(reembolso.monto),
+            motivo_rechazo=comentarios_rh or "No cumple con los requisitos fiscales."
+        )
     
     return reembolso

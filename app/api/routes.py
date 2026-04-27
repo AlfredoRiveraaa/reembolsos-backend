@@ -8,10 +8,15 @@ from typing import List, Optional
 from app.db.database import SessionLocal
 from app.db import models
 from app.api import schemas
+from app.core.security import obtener_usuario_actual
 from app.services.extractor_xml import extraer_datos_factura
 from app.services.notificador import NotificadorCorreo
 
-router = APIRouter(prefix="/api/reembolsos", tags=["reembolsos"])
+router = APIRouter(
+    prefix="/api/reembolsos",
+    tags=["reembolsos"],
+    dependencies=[Depends(obtener_usuario_actual)],
+)
 
 def get_db():
     db = SessionLocal()

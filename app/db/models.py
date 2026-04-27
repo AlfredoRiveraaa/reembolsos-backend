@@ -19,3 +19,13 @@ class SolicitudReembolso(Base):
     link_expediente = Column(Text, nullable=True)
 
     fecha_recepcion = Column(DateTime, default=datetime.utcnow)
+
+
+class Usuario(Base):
+    __tablename__ = "Usuarios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    correo = Column(String(150), unique=True, index=True, nullable=False)
+    nombre_completo = Column(String(200), nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    rol = Column(String(50), nullable=False, default="admin_rh")

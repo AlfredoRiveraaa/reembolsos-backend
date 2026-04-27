@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.database import engine
 from app.db import models
+from app.api.auth import router as auth_router
 from app.api.routes import router as reembolsos_router
 
 # Crear tablas en la BD
@@ -29,6 +30,7 @@ app.add_middleware(
 # ==========================================
 
 app.include_router(reembolsos_router)
+app.include_router(auth_router)
 
 # ==========================================
 # ENDPOINTS - SALUD

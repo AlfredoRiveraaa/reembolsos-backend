@@ -19,6 +19,38 @@ load_dotenv()
 EMAIL_USER = os.getenv("EMAIL_USUARIO")
 EMAIL_PASS = os.getenv("EMAIL_PASSWORD")
 API_URL = "http://127.0.0.1:8000/api/reembolsos/procesar-xml"
+LOGIN_URL = os.getenv("API_LOGIN_URL", "http://127.0.0.1:8000/api/login")
+ROBOT_API_CORREO = os.getenv("ROBOT_API_CORREO", EMAIL_USER)
+ROBOT_API_PASSWORD = os.getenv("ROBOT_API_PASSWORD")
+
+
+def obtener_token_api():
+    """Hace login contra la API y retorna access_token."""
+    if not ROBOT_API_CORREO or not ROBOT_API_PASSWORD:
+        print("Faltan ROBOT_API_CORREO o ROBOT_API_PASSWORD en .env")
+        return None
+
+    try:
+        respuesta = requests.post(
+            LOGIN_URL,
+            json={"correo": ROBOT_API_CORREO, "password": ROBOT_API_PASSWORD},
+            timeout=20,
+        )
+        if respuesta.status_code != 200:
+            print(f"Login API fallido ({respuesta.status_code}): {respuesta.text}")
+            return None
+
+        payload = respuesta.json()
+        token = payload.get("access_token")
+        if not token:
+            print("Login API sin access_token en la respuesta")
+            return None
+
+        print("Token JWT obtenido correctamente")
+        return token
+    except Exception as e:
+        print(f"Error obteniendo token API: {str(e)}")
+        return None
 
 def limpiar_texto(texto):
     """Decodifica y limpia texto de correos con múltiples encodings."""
@@ -28,7 +60,7 @@ def limpiar_texto(texto):
         return decodificado.decode(charset or "utf-8", errors="ignore")
     return decodificado
 
-def leer_bandeja_y_procesar():
+def leer_bandeja_y_procesar(token_api):
     """
     Lee los correos no leídos de Gmail y procesa los adjuntos XML/PDF.
     Envía los archivos a la API de reembolsos.
@@ -38,9 +70,14 @@ def leer_bandeja_y_procesar():
         mail.login(EMAIL_USER, EMAIL_PASS)
         mail.select("inbox")
         
+        if not token_api:
+            print("No hay token API para procesar correos")
+            return False
+
         status, mensajes = mail.search(None, "UNSEEN")
         lista_ids = mensajes[0].split()
-        if not lista_ids: return
+        if not lista_ids:
+            return True
         lista_ids = lista_ids[-5:]  # Procesar últimos 5 correos
 
         for num_id in lista_ids:
@@ -91,7 +128,13 @@ def leer_bandeja_y_procesar():
                             archivos_para_enviar.append(("pdfs", (nom_pdf, f_abierto, "application/pdf")))
 
                         print("Enviando paquete a la API...")
-                        respuesta = requests.post(API_URL, files=archivos_para_enviar, data={"correo": correo_remitente})
+                        respuesta = requests.post(
+                            API_URL,
+                            files=archivos_para_enviar,
+                            data={"correo": correo_remitente},
+                            headers={"Authorization": f"Bearer {token_api}"},
+                            timeout=60,
+                        )
                         
                         for f in archivos_abiertos: f.close()
                         os.remove(ruta_temp_xml)
@@ -101,6 +144,9 @@ def leer_bandeja_y_procesar():
                             print(f"API: Registro guardado (ID: {respuesta.json()['id']})")
                             procesado_con_exito = True
                         else:
+                            if respuesta.status_code == 401:
+                                print("API: Token invalido o expirado. Se renovara login.")
+                                return False
                             if "duplicate key" in respuesta.text:
                                 print("API: El archivo ya existía en la BD.")
                                 procesado_con_exito = True
@@ -113,9 +159,11 @@ def leer_bandeja_y_procesar():
 
         mail.expunge()
         mail.close()
+        return True
 
     except Exception as e:
         print(f"Error en robot_correos: {str(e)}")
+        return True
 
 def ejecutar_en_bucle(intervalo_segundos=60):
     """
@@ -125,8 +173,19 @@ def ejecutar_en_bucle(intervalo_segundos=60):
         intervalo_segundos: Tiempo de espera entre ejecuciones (por defecto 60s)
     """
     print(f"Robot de Correos iniciado - Verificando cada {intervalo_segundos}s...")
+    token_api = obtener_token_api()
+
     while True:
-        leer_bandeja_y_procesar()
+        if not token_api:
+            token_api = obtener_token_api()
+            if not token_api:
+                time.sleep(intervalo_segundos)
+                continue
+
+        token_valido = leer_bandeja_y_procesar(token_api)
+        if not token_valido:
+            token_api = None
+
         time.sleep(intervalo_segundos)
 
 if __name__ == "__main__":

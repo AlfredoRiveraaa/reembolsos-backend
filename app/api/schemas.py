@@ -26,3 +26,31 @@ class ReembolsoResponse(ReembolsoBase):
 
     class Config:
         from_attributes = True
+
+
+class UsuarioCreate(BaseModel):
+    correo: str
+    nombre_completo: str
+    password: str
+    rol: str = "admin_rh"
+
+
+class UsuarioResponse(BaseModel):
+    id: int
+    correo: str
+    nombre_completo: str
+    rol: str
+
+    class Config:
+        from_attributes = True
+
+
+class Login(BaseModel):
+    correo: str
+    password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    expires_in: int

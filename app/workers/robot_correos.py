@@ -33,7 +33,7 @@ def obtener_token_api():
     try:
         respuesta = requests.post(
             LOGIN_URL,
-            json={"correo": ROBOT_API_CORREO, "password": ROBOT_API_PASSWORD},
+            data={"username": ROBOT_API_CORREO, "password": ROBOT_API_PASSWORD},
             timeout=20,
         )
         if respuesta.status_code != 200:
@@ -106,6 +106,9 @@ def leer_bandeja_y_procesar(token_api):
                                 lista_pdfs.append((nombre_archivo, part.get_payload(decode=True)))
 
                     procesado_con_exito = False
+                    # --- NUEVO: Banderas de cuarentena ---
+                    tiene_error = False
+                    razon_error = ""
 
                     if contenido_xml:
                         print(f"XML encontrado: {nombre_xml}")
@@ -150,12 +153,27 @@ def leer_bandeja_y_procesar(token_api):
                             if "duplicate key" in respuesta.text:
                                 print("API: El archivo ya existía en la BD.")
                                 procesado_con_exito = True
-                            else: print(f"API Error: {respuesta.text}")
+                            else: 
+                                print(f"API Error: {respuesta.text}")
+                                tiene_error = True
+                                razon_error = "Rechazado por la API"
+                    else:
+                        print("Error: El correo no contiene ningún archivo XML adjunto.")
+                        tiene_error = True
+                        razon_error = "Falta archivo XML"
 
+                    # --- CLASIFICACIÓN FINAL EN GMAIL ---
                     if procesado_con_exito:
                         if mail.copy(num_id, "PROCESADOS")[0] == 'OK':
                             mail.store(num_id, '+FLAGS', '\\Deleted')
                             print("Correo movido a 'PROCESADOS'.")
+                    elif tiene_error:
+                        try:
+                            if mail.copy(num_id, "ERROR_XML")[0] == 'OK':
+                                mail.store(num_id, '+FLAGS', '\\Deleted')
+                                print(f"Correo movido a cuarentena 'ERROR_XML' ({razon_error}).")
+                        except Exception as e:
+                            print(f"No se pudo mover a ERROR_XML (¿Existe la etiqueta en Gmail?): {e}")
 
         mail.expunge()
         mail.close()

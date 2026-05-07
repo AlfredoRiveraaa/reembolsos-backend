@@ -85,8 +85,18 @@ def leer_bandeja_y_procesar(token_api):
             for respuesta_part in datos_msg:
                 if isinstance(respuesta_part, tuple):
                     msg = email.message_from_bytes(respuesta_part[1])
+                    
                     correo_remitente = limpiar_texto(msg.get("From")).split("<")[-1].replace(">", "").strip()
+                    asunto_correo = limpiar_texto(msg.get("Subject", ""))
+                    
                     print(f"\nAnalizando correo de: {correo_remitente}")
+                    print(f"Asunto: {asunto_correo}")
+
+                    partes_asunto = asunto_correo.split("-")
+                    if len(partes_asunto) >= 2:
+                        nombre_solicitante = partes_asunto[-1].strip()
+                    else:
+                        nombre_solicitante = ""
 
                     contenido_xml = None
                     nombre_xml = None
@@ -106,11 +116,20 @@ def leer_bandeja_y_procesar(token_api):
                                 lista_pdfs.append((nombre_archivo, part.get_payload(decode=True)))
 
                     procesado_con_exito = False
-                    # --- NUEVO: Banderas de cuarentena ---
                     tiene_error = False
                     razon_error = ""
 
-                    if contenido_xml:
+                    if not nombre_solicitante:
+                        print("Error: Asunto inválido. Debe incluir el nombre después de un guion (-).")
+                        tiene_error = True
+                        razon_error = "Asunto sin formato válido"
+                    
+                    elif not contenido_xml:
+                        print("Error: El correo no contiene ningún archivo XML adjunto.")
+                        tiene_error = True
+                        razon_error = "Falta archivo XML"
+                        
+                    else:
                         print(f"XML encontrado: {nombre_xml}")
                         print(f"Se encontraron {len(lista_pdfs)} archivo(s) PDF adjuntos.")
 
@@ -134,7 +153,10 @@ def leer_bandeja_y_procesar(token_api):
                         respuesta = requests.post(
                             API_URL,
                             files=archivos_para_enviar,
-                            data={"correo": correo_remitente},
+                            data={
+                                "correo": correo_remitente,
+                                "nombre_solicitante": nombre_solicitante
+                            },
                             headers={"Authorization": f"Bearer {token_api}"},
                             timeout=60,
                         )
@@ -157,10 +179,6 @@ def leer_bandeja_y_procesar(token_api):
                                 print(f"API Error: {respuesta.text}")
                                 tiene_error = True
                                 razon_error = "Rechazado por la API"
-                    else:
-                        print("Error: El correo no contiene ningún archivo XML adjunto.")
-                        tiene_error = True
-                        razon_error = "Falta archivo XML"
 
                     # --- CLASIFICACIÓN FINAL EN GMAIL ---
                     if procesado_con_exito:

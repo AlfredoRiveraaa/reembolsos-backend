@@ -23,6 +23,9 @@ class ReembolsoResponse(ReembolsoBase):
     fecha_factura: Optional[datetime] = None
     mensaje_rechazo: Optional[str] = None
     link_expediente: Optional[str] = None
+    nombre_solicitante: Optional[str] = None
+    fecha_resolucion: Optional[datetime] = None
+    mensaje: Optional[str] = None
 
     class Config:
         from_attributes = True

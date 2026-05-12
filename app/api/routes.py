@@ -1,5 +1,6 @@
 import os
 import shutil
+import mimetypes
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, BackgroundTasks
@@ -56,38 +57,50 @@ def obtener_reembolso_por_id(
 
     return reembolso
 
-@router.get("/{reembolso_id}/archivo")
-def obtener_archivo_reembolso(
+@router.get("/{reembolso_id}/archivos", response_model=List[str])
+def listar_archivos_reembolso(
     reembolso_id: int,
     db: Session = Depends(get_db),
     usuario_actual: models.Usuario = Depends(obtener_usuario_actual),
 ):
     reembolso = db.query(models.SolicitudReembolso).filter(models.SolicitudReembolso.id == reembolso_id).first()
 
-    if not reembolso:
-        raise HTTPException(status_code=404, detail="Reembolso no encontrado")
-
-    if not reembolso.link_expediente:
-        raise HTTPException(status_code=404, detail="Este reembolso no tiene un expediente asociado")
+    if not reembolso or not reembolso.link_expediente:
+        return []
 
     base_dir = reembolso.link_expediente
 
     if not os.path.exists(base_dir):
-        raise HTTPException(status_code=404, detail=f"Carpeta no encontrada físicamente: {base_dir}")
+        return []
 
     try:
-        archivos = os.listdir(base_dir)
-        pdf_file = next((f for f in archivos if f.lower().endswith(".pdf")), None)
-
-        if not pdf_file:
-            raise HTTPException(status_code=404, detail="No se encontró ningún PDF en la carpeta")
-
-        file_path = os.path.join(base_dir, pdf_file)
-
-        # Devolvemos el PDF al frontend
-        return FileResponse(file_path, media_type="application/pdf", filename=pdf_file)
+        return [f for f in os.listdir(base_dir) if os.path.isfile(os.path.join(base_dir, f))]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al leer la carpeta: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al leer carpeta: {str(e)}")
+
+@router.get("/{reembolso_id}/archivo/{nombre_archivo}")
+def obtener_archivo_especifico(
+    reembolso_id: int,
+    nombre_archivo: str,
+    db: Session = Depends(get_db),
+    usuario_actual: models.Usuario = Depends(obtener_usuario_actual),
+):
+    reembolso = db.query(models.SolicitudReembolso).filter(models.SolicitudReembolso.id == reembolso_id).first()
+
+    if not reembolso or not reembolso.link_expediente:
+        raise HTTPException(status_code=404, detail="Expediente no encontrado")
+
+    base_dir = reembolso.link_expediente
+    file_path = os.path.join(base_dir, nombre_archivo)
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+    media_type, _ = mimetypes.guess_type(nombre_archivo)
+    if not media_type:
+        media_type = "application/octet-stream"
+
+    return FileResponse(file_path, media_type=media_type, filename=nombre_archivo)
 
 @router.post("", response_model=schemas.ReembolsoResponse, status_code=201)
 def crear_reembolso(reembolso: schemas.ReembolsoCreate, db: Session = Depends(get_db)):
@@ -146,6 +159,11 @@ async def procesar_factura_xml(
     if pdfs_validos:
         ruta_carpeta_expediente = f"expedientes_pdf/{datos['uuid']}"
         os.makedirs(ruta_carpeta_expediente, exist_ok=True)
+
+        archivo.file.seek(0)
+        ruta_xml = os.path.join(ruta_carpeta_expediente, archivo.filename)
+        with open(ruta_xml, "wb") as f_xml:
+            f_xml.write(archivo.file.read())
         
         for pdf in pdfs_validos:
             ruta_pdf_final = f"{ruta_carpeta_expediente}/{pdf.filename}"

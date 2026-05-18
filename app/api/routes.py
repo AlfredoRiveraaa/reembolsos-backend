@@ -275,5 +275,59 @@ def actualizar_estatus(
             monto=float(reembolso.monto),
             motivo_rechazo=comentarios_rh or "No cumple con los requisitos fiscales."
         )
+    elif reembolso.estatus in [
+        "INFO_SOLICITADA",
+        "SOLICITUD INFORMACION",
+        "SOLICITUD DE INFORMACION",
+        "SOLICITUD_INFORMACION",
+        "SOLICITUD DE INFORMACIÓN",
+        "SOLICITUD INFORMACIÓN",
+        "INFORMACION",
+        "INFORMACIÓN",
+        "INFORMACION_ADICIONAL",
+        "INFORMACIÓN_ADICIONAL",
+    ]:
+        background_tasks.add_task(
+            NotificadorCorreo.enviar_solicitud_informacion,
+            correo_solicitante=reembolso.correo_solicitante,
+            uuid_factura=reembolso.uuid,
+            motivo=comentarios_rh or "Se requiere información adicional para continuar con el trámite."
+        )
     
     return reembolso
+
+
+@router.post("/actualizar-expediente/{folio_corto}")
+def actualizar_expediente(
+    folio_corto: str,
+    archivos: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    usuario_actual: models.Usuario = Depends(obtener_usuario_actual)
+):
+    # Buscamos el reembolso usando los primeros 8 caracteres del UUID
+    reembolso = db.query(models.SolicitudReembolso).filter(
+        models.SolicitudReembolso.uuid.startswith(folio_corto)
+    ).first()
+
+    if not reembolso:
+        raise HTTPException(status_code=404, detail="Folio no encontrado")
+
+    if not reembolso.link_expediente or not os.path.exists(reembolso.link_expediente):
+        raise HTTPException(status_code=404, detail="Carpeta del expediente no encontrada")
+
+    # Guardamos los nuevos archivos en la misma carpeta, agregando el prefijo "NUEVO_"
+    archivos_guardados = 0
+    for archivo in archivos:
+        if archivo.filename:
+            ruta_archivo = os.path.join(reembolso.link_expediente, f"NUEVO_{archivo.filename}")
+            with open(ruta_archivo, "wb") as f:
+                f.write(archivo.file.read())
+            archivos_guardados += 1
+
+    if archivos_guardados > 0:
+        # Regresamos el estado a PENDIENTE para que RH lo vuelva a revisar
+        reembolso.estatus = "PENDIENTE"
+        reembolso.mensaje = "El trabajador envió documentación corregida/adicional."
+        db.commit()
+
+    return {"status": "success", "message": f"{archivos_guardados} archivos agregados al expediente"}

@@ -10,6 +10,7 @@ Se ejecuta de forma independiente de la API principal.
 import imaplib
 import email
 import os
+import re
 import requests
 import time
 from dotenv import load_dotenv
@@ -92,11 +93,22 @@ def leer_bandeja_y_procesar(token_api):
                     print(f"\nAnalizando correo de: {correo_remitente}")
                     print(f"Asunto: {asunto_correo}")
 
-                    partes_asunto = asunto_correo.split("-")
-                    if len(partes_asunto) >= 2:
-                        nombre_solicitante = partes_asunto[-1].strip()
+                    # --- NUEVA LÓGICA DE DETECCIÓN DE FOLIO ---
+                    match_folio = re.search(r"Folio:\s*([A-Fa-f0-9]{8})", asunto_correo, re.IGNORECASE)
+
+                    es_actualizacion = False
+                    folio_corto = None
+                    nombre_solicitante = ""
+
+                    if match_folio:
+                        es_actualizacion = True
+                        folio_corto = match_folio.group(1).upper()
+                        print(f"Detectado correo de RESPUESTA/ACTUALIZACIÓN para el Folio: {folio_corto}")
                     else:
-                        nombre_solicitante = ""
+                        # Lógica original para correos nuevos
+                        partes_asunto = asunto_correo.split("-")
+                        if len(partes_asunto) >= 2:
+                            nombre_solicitante = partes_asunto[-1].strip()
 
                     contenido_xml = None
                     nombre_xml = None
@@ -119,64 +131,85 @@ def leer_bandeja_y_procesar(token_api):
                     tiene_error = False
                     razon_error = ""
 
-                    if not nombre_solicitante:
+                    # Si es un correo nuevo, validamos que tenga nombre y XML
+                    if not es_actualizacion and not nombre_solicitante:
                         print("Error: Asunto inválido. Debe incluir el nombre después de un guion (-).")
                         tiene_error = True
                         razon_error = "Asunto sin formato válido"
                     
-                    elif not contenido_xml:
+                    elif not es_actualizacion and not contenido_xml:
                         print("Error: El correo no contiene ningún archivo XML adjunto.")
                         tiene_error = True
                         razon_error = "Falta archivo XML"
                         
                     else:
-                        print(f"XML encontrado: {nombre_xml}")
-                        print(f"Se encontraron {len(lista_pdfs)} archivo(s) PDF adjuntos.")
+                        # --- PREPARAMOS LOS ARCHIVOS (PDFs y XMLs si los hay) ---
+                        archivos_para_enviar = []
+                        rutas_temp = []
+                        archivos_abiertos = []
 
-                        ruta_temp_xml = f"temp_{nombre_xml}"
-                        with open(ruta_temp_xml, "wb") as f: f.write(contenido_xml)
+                        # Agregamos el XML si viene (puede ser un correo nuevo o una corrección de XML)
+                        if contenido_xml:
+                            ruta_temp_xml = f"temp_{nombre_xml}"
+                            rutas_temp.append(ruta_temp_xml)
+                            with open(ruta_temp_xml, "wb") as f:
+                                f.write(contenido_xml)
+                            f_abierto = open(ruta_temp_xml, "rb")
+                            archivos_abiertos.append(f_abierto)
 
-                        archivos_para_enviar = [("archivo", (nombre_xml, open(ruta_temp_xml, "rb"), "application/xml"))]
-                        archivos_abiertos = [archivos_para_enviar[0][1][1]]
-                        rutas_temp_pdfs = []
+                            # Si es nuevo, FastAPI lo espera como 'archivo'. Si es actualización, como 'archivos'
+                            key_xml = "archivos" if es_actualizacion else "archivo"
+                            archivos_para_enviar.append((key_xml, (nombre_xml, f_abierto, "application/xml")))
 
+                        # Agregamos los PDFs
                         for i, (nom_pdf, cont_pdf) in enumerate(lista_pdfs):
                             ruta_temp_pdf = f"temp_pdf_{i}.pdf"
-                            rutas_temp_pdfs.append(ruta_temp_pdf)
-                            with open(ruta_temp_pdf, "wb") as f: f.write(cont_pdf)
-                            
+                            rutas_temp.append(ruta_temp_pdf)
+                            with open(ruta_temp_pdf, "wb") as f:
+                                f.write(cont_pdf)
                             f_abierto = open(ruta_temp_pdf, "rb")
                             archivos_abiertos.append(f_abierto)
-                            archivos_para_enviar.append(("pdfs", (nom_pdf, f_abierto, "application/pdf")))
 
-                        print("Enviando paquete a la API...")
-                        respuesta = requests.post(
-                            API_URL,
-                            files=archivos_para_enviar,
-                            data={
-                                "correo": correo_remitente,
-                                "nombre_solicitante": nombre_solicitante
-                            },
-                            headers={"Authorization": f"Bearer {token_api}"},
-                            timeout=60,
-                        )
-                        
-                        for f in archivos_abiertos: f.close()
-                        os.remove(ruta_temp_xml)
-                        for r in rutas_temp_pdfs: os.remove(r)
+                            key_pdf = "archivos" if es_actualizacion else "pdfs"
+                            archivos_para_enviar.append((key_pdf, (nom_pdf, f_abierto, "application/pdf")))
 
-                        if respuesta.status_code == 201:
-                            print(f"API: Registro guardado (ID: {respuesta.json()['id']})")
-                            procesado_con_exito = True
+                        if not archivos_para_enviar:
+                            print("Error: El correo de respuesta no tiene ningún archivo adjunto.")
+                            tiene_error = True
+                            razon_error = "Respuesta sin adjuntos"
                         else:
-                            if respuesta.status_code == 401:
-                                print("API: Token invalido o expirado. Se renovara login.")
-                                return False
-                            if "duplicate key" in respuesta.text:
-                                print("API: El archivo ya existía en la BD.")
+                            # --- ENVIAMOS A LA API CORRESPONDIENTE ---
+                            if es_actualizacion:
+                                print(f"Enviando archivos de corrección a la API (Folio {folio_corto})...")
+                                url_destino = f"http://127.0.0.1:8000/api/reembolsos/actualizar-expediente/{folio_corto}"
+                                respuesta = requests.post(
+                                    url_destino,
+                                    files=archivos_para_enviar,
+                                    headers={"Authorization": f"Bearer {token_api}"},
+                                    timeout=60,
+                                )
+                            else:
+                                print("Enviando paquete nuevo a la API...")
+                                respuesta = requests.post(
+                                    API_URL,
+                                    files=archivos_para_enviar,
+                                    data={"correo": correo_remitente, "nombre_solicitante": nombre_solicitante},
+                                    headers={"Authorization": f"Bearer {token_api}"},
+                                    timeout=60,
+                                )
+
+                            # Limpieza de temporales
+                            for f in archivos_abiertos:
+                                f.close()
+                            for r in rutas_temp:
+                                os.remove(r)
+
+                            # Verificamos respuesta
+                            if respuesta.status_code in [200, 201]:
+                                print(f"API OK: {respuesta.json()}")
                                 procesado_con_exito = True
-                            else: 
-                                print(f"API Error: {respuesta.text}")
+                            else:
+                                print(f"API Error ({respuesta.status_code}): {respuesta.text}")
                                 tiene_error = True
                                 razon_error = "Rechazado por la API"
 

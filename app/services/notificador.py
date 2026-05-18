@@ -124,6 +124,41 @@ class NotificadorCorreo:
         return NotificadorCorreo._enviar_correo(correo_solicitante, asunto, cuerpo_html)
 
     @staticmethod
+    def enviar_solicitud_informacion(correo_solicitante: str, uuid_factura: str, motivo: str) -> bool:
+        """
+        Notifica al empleado que se requiere información adicional para continuar el trámite.
+
+        Args:
+            correo_solicitante: Email del empleado
+            uuid_factura: UUID de la factura
+            motivo: Detalle de la información solicitada
+
+        Returns:
+            True si se envió exitosamente
+        """
+        asunto = f"⚠ Información adicional requerida - Folio: {uuid_factura[:8]}"
+
+        cuerpo_html = f"""
+        <html>
+            <body style="font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px;">
+                <div style="max-width: 600px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 8px;">
+                    <h2 style="color: #f39c12; border-bottom: 3px solid #f39c12; padding-bottom: 10px;">
+                        Solicitud de Información Adicional
+                    </h2>
+                    <p>Estimado empleado,</p>
+                    <p>Para continuar con el trámite de su reembolso, requerimos lo siguiente:</p>
+                    <div style="background-color: #fef9e7; padding: 15px; border-left: 4px solid #f39c12; margin: 20px 0;">
+                        <p style="font-style: italic;">"{motivo}"</p>
+                    </div>
+                    <p><strong>Instrucciones:</strong> Por favor, responda a este correo adjuntando los archivos corregidos.
+                    <strong>No cambie el asunto del correo</strong>, ya que contiene su número de folio.</p>
+                </div>
+            </body>
+        </html>
+        """
+        return NotificadorCorreo._enviar_correo(correo_solicitante, asunto, cuerpo_html)
+
+    @staticmethod
     def enviar_validacion(correo_solicitante: str, uuid_factura: str, monto: float, comentarios_rh: Optional[str] = None) -> bool:
         """
         Notifica al empleado que su solicitud fue VALIDADA por RH.

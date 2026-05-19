@@ -264,3 +264,46 @@ class NotificadorCorreo:
         </html>
         """
         return NotificadorCorreo._enviar_correo(correo_solicitante, asunto, cuerpo_html)
+
+    @staticmethod
+    def enviar_error_formato(correo_solicitante: str, motivo_error: str, instrucciones: str) -> bool:
+        """
+        Notifica al empleado que su correo inicial fue rechazado por no cumplir las reglas.
+        """
+        asunto = "⚠ Error al procesar tu solicitud de reembolso"
+
+        cuerpo_html = f"""
+        <html>
+            <body style="font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px;">
+                <div style="max-width: 600px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <h2 style="color: #e67e22; border-bottom: 3px solid #e67e22; padding-bottom: 10px;">
+                        No pudimos procesar tu solicitud
+                    </h2>
+                    <p>Estimado trabajador,</p>
+                    <p>Nuestro sistema automático detectó un problema con el correo que acabas de enviar y <strong>tu solicitud no ha sido registrada</strong>.</p>
+                    
+                    <div style="background-color: #fdf2e9; padding: 15px; border-left: 4px solid #e67e22; margin: 20px 0;">
+                        <p style="margin: 5px 0; color: #d35400;"><strong>Motivo del error detectado:</strong></p>
+                        <p style="margin: 5px 0;">{motivo_error}</p>
+                    </div>
+                    
+                    <h3 style="color: #2c3e50;">¿Cómo solucionarlo?</h3>
+                    <p style="background-color: #e8f8f5; padding: 12px; border-radius: 4px; color: #16a085;">
+                        {instrucciones}
+                    </p>
+                    
+                    <h4 style="color: #2c3e50; margin-top: 20px;">Recordatorio de las Reglas Oficiales:</h4>
+                    <ul style="color: #555; font-size: 14px; line-height: 1.6;">
+                        <li>Envía <strong>un solo correo por cada solicitud</strong> de reembolso.</li>
+                        <li>El correo debe contener <strong>máximo 3 archivos</strong>: <br>1. XML de la factura <br>2. PDF de la Factura original <br>3. PDF de la Orden Médica.</li>
+                        <li>El asunto debe llevar la palabra <strong>Reembolso</strong> seguida de un guion y tu nombre.</li>
+                    </ul>
+                    
+                    <p style="color: #7f8c8d; font-size: 12px; margin-top: 30px; border-top: 1px solid #ecf0f1; padding-top: 10px;">
+                        ⚠ Por favor corrige el error y envía un <strong>NUEVO correo</strong>. Este mensaje es automático.
+                    </p>
+                </div>
+            </body>
+        </html>
+        """
+        return NotificadorCorreo._enviar_correo(correo_solicitante, asunto, cuerpo_html)

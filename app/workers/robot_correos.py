@@ -16,6 +16,8 @@ import time
 from dotenv import load_dotenv
 from email.header import decode_header
 
+from app.services.notificador import NotificadorCorreo
+
 load_dotenv()
 EMAIL_USER = os.getenv("EMAIL_USUARIO")
 EMAIL_PASS = os.getenv("EMAIL_PASSWORD")
@@ -110,9 +112,10 @@ def leer_bandeja_y_procesar(token_api):
                         if len(partes_asunto) >= 2:
                             nombre_solicitante = partes_asunto[-1].strip()
 
-                    contenido_xml = None
-                    nombre_xml = None
-                    lista_pdfs = [] 
+                    # --- EXTRAER ARCHIVOS ---
+                    lista_xmls = []
+                    lista_pdfs = []
+                    archivos_invalidos = []
 
                     for part in msg.walk():
                         if part.get_content_maintype() == "multipart" or part.get("Content-Disposition") is None: continue
@@ -122,27 +125,70 @@ def leer_bandeja_y_procesar(token_api):
                             nombre_archivo = limpiar_texto(nombre_archivo)
                             ext = nombre_archivo.lower()
                             if ext.endswith(".xml"):
-                                nombre_xml = nombre_archivo
-                                contenido_xml = part.get_payload(decode=True)
+                                lista_xmls.append((nombre_archivo, part.get_payload(decode=True)))
                             elif ext.endswith(".pdf"):
                                 lista_pdfs.append((nombre_archivo, part.get_payload(decode=True)))
+                            else:
+                                # Si no es ni PDF ni XML, lo guardamos como inválido
+                                archivos_invalidos.append(nombre_archivo)
+
+                    # Contamos cuántos archivos llegaron
+                    num_xmls = len(lista_xmls)
+                    num_pdfs = len(lista_pdfs)
+                    num_invalidos = len(archivos_invalidos)
+                    
+                    # Si hay al menos un XML, lo preparamos para el resto del código
+                    nombre_xml = lista_xmls[0][0] if num_xmls > 0 else None
+                    contenido_xml = lista_xmls[0][1] if num_xmls > 0 else None
 
                     procesado_con_exito = False
                     tiene_error = False
                     razon_error = ""
+                    mensaje_error_usuario = ""
+                    instrucciones_usuario = ""
 
-                    # Si es un correo nuevo, validamos que tenga nombre y XML
-                    if not es_actualizacion and not nombre_solicitante:
-                        print("Error: Asunto inválido. Debe incluir el nombre después de un guion (-).")
-                        tiene_error = True
-                        razon_error = "Asunto sin formato válido"
-                    
-                    elif not es_actualizacion and not contenido_xml:
-                        print("Error: El correo no contiene ningún archivo XML adjunto.")
-                        tiene_error = True
-                        razon_error = "Falta archivo XML"
-                        
-                    else:
+                    num_pdfs = len(lista_pdfs)
+
+                    # --- LÓGICA DE DETECCIÓN DE ERRORES AL USUARIO ---
+                    if not es_actualizacion:
+                        if not nombre_solicitante:
+                            tiene_error = True
+                            razon_error = "Asunto sin formato válido"
+                            mensaje_error_usuario = "El asunto de tu correo no sigue el formato establecido."
+                            instrucciones_usuario = "Asegúrate de escribir la palabra 'Reembolso' seguida de un guion y tu nombre (Ej. Reembolso - Juan Pérez)."
+                            
+                        elif num_xmls == 0:
+                            tiene_error = True
+                            razon_error = "Falta archivo XML"
+                            mensaje_error_usuario = "No se detectó ningún archivo .xml adjunto."
+                            instrucciones_usuario = "Debes adjuntar el archivo XML original emitido por el proveedor."
+                            
+                        elif num_xmls > 1:
+                            tiene_error = True
+                            razon_error = "Exceso de archivos XML"
+                            mensaje_error_usuario = f"Se detectaron {num_xmls} archivos XML en tu correo."
+                            instrucciones_usuario = "Solo puedes enviar un (1) archivo XML por correo. Recuerda que cada solicitud debe tramitarse en un correo independiente."
+
+                        elif num_invalidos > 0:
+                            tiene_error = True
+                            razon_error = "Formato de archivo no permitido"
+                            nombres_malos = ", ".join(archivos_invalidos)
+                            mensaje_error_usuario = f"Adjuntaste archivos con formatos no aceptados ({nombres_malos})."
+                            instrucciones_usuario = "El sistema NO procesa imágenes (JPG, PNG), documentos de Word ni Excel. Por favor, convierte todos tus comprobantes y recetas a formato PDF y vuelve a enviar el correo."
+                            
+                        elif num_pdfs == 0:
+                            tiene_error = True
+                            razon_error = "Falta Factura o Receta en PDF"
+                            mensaje_error_usuario = "No adjuntaste los archivos PDF requeridos."
+                            instrucciones_usuario = "Es obligatorio adjuntar la Factura Original (PDF) y la Orden Médica (PDF)."
+                            
+                        elif num_pdfs > 2: 
+                            tiene_error = True
+                            razon_error = "Exceso de archivos PDF"
+                            mensaje_error_usuario = f"Se detectaron {num_pdfs} archivos PDF en tu correo."
+                            instrucciones_usuario = "Separa tus solicitudes. Cada correo es una solicitud independiente y solo debe tener el PDF de la factura y el PDF de su receta."
+
+                    if not tiene_error:
                         # --- PREPARAMOS LOS ARCHIVOS (PDFs y XMLs si los hay) ---
                         archivos_para_enviar = []
                         rutas_temp = []
@@ -212,6 +258,27 @@ def leer_bandeja_y_procesar(token_api):
                                 print(f"API Error ({respuesta.status_code}): {respuesta.text}")
                                 tiene_error = True
                                 razon_error = "Rechazado por la API"
+
+                                # Detectar si fue por estar Duplicado en BD
+                                if "duplicate key" in respuesta.text.lower() or "integrityerror" in respuesta.text.lower():
+                                    razon_error = "Factura Duplicada en Sistema"
+                                    mensaje_error_usuario = "El archivo XML que enviaste ya fue registrado previamente y tiene un folio asignado."
+                                    instrucciones_usuario = "Si Recursos Humanos te solicitó corregir un documento, NO debes enviar un correo nuevo. Debes buscar el correo que te envió RH y darle clic en 'Responder' adjuntando la corrección."
+                                else:
+                                    mensaje_error_usuario = "Los datos dentro de tu archivo XML no pasaron la validación fiscal del sistema."
+                                    instrucciones_usuario = "Por favor, verifica que estés enviando un XML válido y vigente."
+
+                    # --- ENVÍO DE FEEDBACK AL TRABAJADOR ---
+                    if tiene_error and mensaje_error_usuario and correo_remitente:
+                        print(f"Enviando correo de auto-corrección al trabajador: {razon_error}")
+                        try:
+                            NotificadorCorreo.enviar_error_formato(
+                                correo_remitente,
+                                mensaje_error_usuario,
+                                instrucciones_usuario,
+                            )
+                        except Exception as e:
+                            print(f"Fallo al enviar correo de feedback: {e}")
 
                     # --- CLASIFICACIÓN FINAL EN GMAIL ---
                     if procesado_con_exito:

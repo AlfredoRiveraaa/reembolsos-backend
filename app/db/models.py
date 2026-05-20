@@ -10,7 +10,7 @@ class SolicitudReembolso(Base):
     uuid = Column(String(50), unique=True, index=True, nullable=False)
     monto = Column(Numeric(10, 2), nullable=False)
     correo_solicitante = Column(String(100), nullable=False)
-    nombre_solicitante = Column(String(200), nullable=True)  # NUEVO
+    nombre_solicitante = Column(String(200), nullable=True)
     nombre_proveedor = Column(String(200), nullable=False)
     estatus = Column(String(20), default="PENDIENTE", nullable=False)
     
@@ -36,5 +36,7 @@ class Usuario(Base):
     nombre_completo = Column(String(200), nullable=False)
     password_hash = Column(String(255), nullable=False)
     rol = Column(String(50), nullable=False, default="admin_rh")
+
+    dias_asignados = Column(String(50), default="1,2,3,4,5,6,7")
 
     reembolsos_revisados = relationship("SolicitudReembolso", back_populates="revisor")

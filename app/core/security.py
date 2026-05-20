@@ -69,10 +69,10 @@ def obtener_usuario_actual(
     if usuario is None:
         raise credenciales_invalidas
 
-    if usuario.rol != "admin_rh":
+    if usuario.rol not in ["admin_rh", "trabajador"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acceso restringido a personal de RH",
+            detail="Acceso restringido a personal autorizado",
         )
 
     return usuario

@@ -33,9 +33,40 @@ def get_db():
 # ==========================================
 
 @router.get("", response_model=List[schemas.ReembolsoResponse])
-def obtener_reembolsos(db: Session = Depends(get_db)):
-    """Obtiene lista de todos los reembolsos registrados."""
-    reembolsos = db.query(models.SolicitudReembolso).all()
+def obtener_reembolsos(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    usuario_actual: models.Usuario = Depends(obtener_usuario_actual),
+):
+    query = db.query(models.SolicitudReembolso)
+
+    # Si NO es administrador, filtramos por sus días asignados
+    if usuario_actual.rol != "ADMIN" and usuario_actual.dias_asignados:
+        try:
+            # Convertimos "1,3,5" en una lista de enteros [1, 3, 5] (Lunes=1, Domingo=7)
+            dias_permitidos = [int(d.strip()) for d in usuario_actual.dias_asignados.split(",") if d.strip()]
+
+            # Traemos los reembolsos ordenados y los filtramos en Python por fecha_recepcion
+            reembolsos_db = query.order_by(models.SolicitudReembolso.fecha_recepcion.desc()).all()
+
+            reembolsos_filtrados = []
+            for r in reembolsos_db:
+                if r.fecha_recepcion:
+                    # isoweekday() da 1 para Lunes, 7 para Domingo
+                    if r.fecha_recepcion.isoweekday() in dias_permitidos:
+                        reembolsos_filtrados.append(r)
+
+            # Aplicamos skip y limit después de filtrar
+            return reembolsos_filtrados[skip : skip + limit]
+
+        except Exception as e:
+            print(f"Error al filtrar por días: {e}")
+            # Si hay error, por seguridad mostramos todo
+            pass
+
+    # Si es ADMIN o hubo un error al leer los días, devolvemos todo normal
+    reembolsos = query.order_by(models.SolicitudReembolso.fecha_recepcion.desc()).offset(skip).limit(limit).all()
     return reembolsos
 
 @router.get("/{reembolso_id}", response_model=schemas.ReembolsoResponse)

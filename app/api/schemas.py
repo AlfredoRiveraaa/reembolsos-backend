@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime
 
@@ -32,17 +32,19 @@ class ReembolsoResponse(ReembolsoBase):
 
 
 class UsuarioCreate(BaseModel):
-    correo: str
+    correo: EmailStr
     nombre_completo: str
     password: str
     rol: str = "admin_rh"
+    dias_asignados: Optional[str] = "1,2,3,4,5,6,7"
 
 
 class UsuarioResponse(BaseModel):
     id: int
-    correo: str
+    correo: EmailStr
     nombre_completo: str
     rol: str
+    dias_asignados: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -51,6 +53,14 @@ class UsuarioResponse(BaseModel):
 class Login(BaseModel):
     correo: str
     password: str
+
+
+class UsuarioUpdate(BaseModel):
+    nombre_completo: Optional[str] = None
+    correo: Optional[EmailStr] = None
+    rol: Optional[str] = None
+    password: Optional[str] = None
+    dias_asignados: Optional[str] = None
 
 
 class Token(BaseModel):

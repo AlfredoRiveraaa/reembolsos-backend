@@ -17,8 +17,3 @@ __pycache__/
 
 #Ignorar expedientes PDF
 expedientes_pdf/
-
-#Ignorar por el momento
-database_setup.sql
-requirements.txt
-leeme.md

@@ -17,3 +17,5 @@ __pycache__/
 
 #Ignorar expedientes PDF
 expedientes_pdf/
+
+.venv/

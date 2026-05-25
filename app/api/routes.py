@@ -362,3 +362,55 @@ def actualizar_expediente(
         db.commit()
 
     return {"status": "success", "message": f"{archivos_guardados} archivos agregados al expediente"}
+
+
+# --- ENDPOINT DE ESTADÍSTICAS (REPORTES) ---
+
+@router.get("/estadisticas/dashboard")
+def obtener_estadisticas_dashboard(
+    db: Session = Depends(get_db),
+    usuario_actual: models.Usuario = Depends(obtener_usuario_actual),
+):
+    """Genera los datos consolidados para las gráficas de reportes."""
+    # Seguridad: Solo el administrador puede ver reportes globales
+    if usuario_actual.rol != "admin_rh":
+        raise HTTPException(
+            status_code=403,
+            detail="Privilegios insuficientes. Solo administradores pueden ver reportes.",
+        )
+
+    reembolsos = db.query(models.SolicitudReembolso).all()
+
+    current_year = datetime.utcnow().year
+
+    # Montos por mes (Enero a Diciembre del año actual)
+    montos_por_mes = {i: 0.0 for i in range(1, 13)}
+
+    # Conteo de estatus (Aprobado, Rechazado, Pendiente, etc.)
+    estatus_counts = {}
+
+    # Frecuencia de proveedores
+    proveedores_counts = {}
+
+    for r in reembolsos:
+        # Agrupar estatus
+        est = r.estatus.upper()
+        estatus_counts[est] = estatus_counts.get(est, 0) + 1
+
+        # Agrupar proveedores
+        prov = r.nombre_proveedor.upper() if r.nombre_proveedor else "DESCONOCIDO"
+        proveedores_counts[prov] = proveedores_counts.get(prov, 0) + 1
+
+        # Sumar montos por mes (solo del año en curso)
+        if r.fecha_recepcion and r.fecha_recepcion.year == current_year:
+            mes = r.fecha_recepcion.month
+            montos_por_mes[mes] += float(r.monto)
+
+    # Ordenar proveedores para sacar el Top 5
+    top_proveedores = sorted(proveedores_counts.items(), key=lambda item: item[1], reverse=True)[:5]
+
+    return {
+        "montos_por_mes": [montos_por_mes[i] for i in range(1, 13)],
+        "estatus": estatus_counts,
+        "top_proveedores": [{"nombre": k, "cantidad": v} for k, v in top_proveedores]
+    }

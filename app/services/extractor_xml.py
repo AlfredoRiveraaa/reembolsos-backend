@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+from datetime import datetime
 
 def extraer_datos_factura(ruta_archivo_xml: str):
     """
@@ -14,6 +15,15 @@ def extraer_datos_factura(ruta_archivo_xml: str):
         }
 
         monto_total = float(raiz.attrib.get('Total', 0.0))
+        forma_pago = raiz.attrib.get('FormaPago', '99')
+        fecha_factura_str = raiz.attrib.get('Fecha')
+        fecha_factura = None
+
+        if fecha_factura_str:
+            try:
+                fecha_factura = datetime.strptime(fecha_factura_str[:19], "%Y-%m-%dT%H:%M:%S")
+            except ValueError:
+                fecha_factura = None
 
         nodo_emisor = raiz.find('cfdi:Emisor', namespaces)
         if nodo_emisor is not None:
@@ -37,7 +47,9 @@ def extraer_datos_factura(ruta_archivo_xml: str):
                 "uuid": uuid,
                 "rfc_emisor": rfc_emisor,
                 "nombre_emisor": nombre_emisor,
-                "monto_total": monto_total
+                "monto_total": monto_total,
+                "forma_pago": forma_pago,
+                "fecha_factura": fecha_factura,
             }
         }
 

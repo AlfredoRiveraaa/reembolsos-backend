@@ -208,7 +208,9 @@ async def procesar_factura_xml(
         nombre_solicitante=nombre_solicitante,
         nombre_proveedor=datos["nombre_emisor"],
         estatus="PENDIENTE",
+        forma_pago=datos.get("forma_pago"),
         rfc_emisor=datos["rfc_emisor"],
+        fecha_factura=datos.get("fecha_factura"),
         link_expediente=ruta_carpeta_expediente 
     )
     
@@ -283,8 +285,10 @@ def actualizar_estatus(
     # Guardamos los comentarios en la base de datos (reutilizando tu columna)
     if comentarios_rh:
         reembolso.mensaje = comentarios_rh
+
+    reembolso.revisado_por = usuario_actual.id
         
-    reembolso.fecha_resolucion = datetime.utcnow()
+    reembolso.fecha_resolucion = datetime.now()
         
     db.commit()
     db.refresh(reembolso)

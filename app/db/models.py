@@ -20,7 +20,7 @@ class SolicitudReembolso(Base):
     mensaje = Column(Text, nullable=True)
     link_expediente = Column(Text, nullable=True)
 
-    fecha_recepcion = Column(DateTime, default=datetime.utcnow)
+    fecha_recepcion = Column(DateTime, default=datetime.now)
     
     revisado_por = Column(Integer, ForeignKey("Usuarios.id"), nullable=True)
     fecha_resolucion = Column(DateTime, nullable=True)

@@ -79,6 +79,10 @@ class ActualizarUsuarioReq(BaseModel):
     dias_asignados: Optional[str] = "1,2,3,4,5,6,7"
 
 
+class RecuperarPasswordReq(BaseModel):
+    username: str
+
+
 @router.get("/usuarios")
 def listar_usuarios(
     db: Session = Depends(get_db),
@@ -196,3 +200,35 @@ def eliminar_usuario(
         db.commit()
         return {"ok": True, "message": "Usuario eliminado"}
     return {"ok": False, "message": "Error al eliminar"}
+
+
+@router.post("/recuperar-password")
+def recuperar_password(
+    data: RecuperarPasswordReq,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Genera una contraseña temporal y la envía por correo si el usuario existe."""
+    usuario = db.query(models.Usuario).filter(models.Usuario.correo == data.username).first()
+
+    mensaje_exito = {
+        "ok": True,
+        "message": "Si el correo está registrado, recibirás una nueva contraseña en breve.",
+    }
+
+    if not usuario:
+        return mensaje_exito
+
+    alfabeto = string.ascii_letters + string.digits + "!@#$%^&*"
+    password_temporal = "".join(secrets.choice(alfabeto) for _ in range(10))
+
+    usuario.password_hash = get_password_hash(password_temporal)
+    db.commit()
+
+    background_tasks.add_task(
+        NotificadorCorreo.enviar_recuperacion_password,
+        correo_destino=usuario.correo,
+        password_temporal=password_temporal,
+    )
+
+    return mensaje_exito

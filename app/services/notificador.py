@@ -307,3 +307,31 @@ class NotificadorCorreo:
         </html>
         """
         return NotificadorCorreo._enviar_correo(correo_solicitante, asunto, cuerpo_html)
+
+    @staticmethod
+    def enviar_bienvenida_credenciales(correo_destino: str, nombre: str, password_temporal: str) -> bool:
+        """Envía correo de bienvenida con la contraseña temporal generada por el sistema."""
+        asunto = "Bienvenido al Sistema de Reembolsos BUAP"
+
+        cuerpo_html = f"""
+        <html>
+            <body style="font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px;">
+                <div style="max-width: 640px; margin: 0 auto; background-color: white; padding: 24px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                    <h2 style="color: #1f4e79; border-bottom: 3px solid #1f4e79; padding-bottom: 10px;">
+                        Bienvenido al Sistema
+                    </h2>
+                    <p>Hola <strong>{nombre}</strong>,</p>
+                    <p>El departamento de Recursos Humanos ha creado tu cuenta para acceder al Sistema de Reembolsos de la BUAP.</p>
+                    <div style="background-color: #eef5fb; padding: 16px; border-left: 4px solid #1f4e79; margin: 20px 0;">
+                        <p style="margin: 6px 0;"><strong>Usuario:</strong> {correo_destino}</p>
+                        <p style="margin: 6px 0;"><strong>Contraseña temporal:</strong> {password_temporal}</p>
+                    </div>
+                    <p>Por tu seguridad, te recomendamos cambiar esta contraseña una vez que inicies sesión.</p>
+                    <p style="color: #7f8c8d; font-size: 12px; margin-top: 30px; border-top: 1px solid #ecf0f1; padding-top: 10px;">
+                        ⚠ Este es un correo automático. Por favor no respondas a este mensaje.
+                    </p>
+                </div>
+            </body>
+        </html>
+        """
+        return NotificadorCorreo._enviar_correo(correo_destino, asunto, cuerpo_html)

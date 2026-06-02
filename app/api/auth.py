@@ -1,7 +1,9 @@
 from datetime import timedelta
 from typing import Optional
+import secrets
+import string
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -17,6 +19,7 @@ from app.core.security import (
 )
 from app.db import models
 from app.db.database import SessionLocal
+from app.services.notificador import NotificadorCorreo
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
@@ -61,7 +64,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 class CrearUsuarioReq(BaseModel):
     username: str
     displayName: str
-    password: str
+    password: Optional[str] = None
     role: str
     isActive: bool
     dias_asignados: Optional[str] = "1,2,3,4,5,6,7"
@@ -110,6 +113,7 @@ def listar_usuarios(
 @router.post("/usuarios")
 def crear_usuario(
     data: CrearUsuarioReq,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     usuario_actual: models.Usuario = Depends(obtener_usuario_actual),
 ):
@@ -122,15 +126,26 @@ def crear_usuario(
     if db.query(models.Usuario).filter(models.Usuario.correo == data.username).first():
         return {"ok": False, "message": "El correo o matrícula ya está registrado"}
 
+    alfabeto = string.ascii_letters + string.digits + "!@#$%^&*"
+    password_temporal = "".join(secrets.choice(alfabeto) for _ in range(10))
+
     nuevo = models.Usuario(
         correo=data.username,
         nombre_completo=data.displayName,
-        password_hash=get_password_hash(data.password),
+        password_hash=get_password_hash(password_temporal),
         rol="admin_rh" if data.role == "admin" else "trabajador",
         dias_asignados=data.dias_asignados,
     )
     db.add(nuevo)
     db.commit()
+
+    background_tasks.add_task(
+        NotificadorCorreo.enviar_bienvenida_credenciales,
+        correo_destino=data.username,
+        nombre=data.displayName,
+        password_temporal=password_temporal,
+    )
+
     return {"ok": True, "message": "Usuario creado con éxito"}
 
 

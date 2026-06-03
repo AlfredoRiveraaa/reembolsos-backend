@@ -83,6 +83,11 @@ class RecuperarPasswordReq(BaseModel):
     username: str
 
 
+class CambiarPasswordReq(BaseModel):
+    password_actual: str
+    password_nueva: str
+
+
 @router.get("/usuarios")
 def listar_usuarios(
     db: Session = Depends(get_db),
@@ -232,3 +237,24 @@ def recuperar_password(
     )
 
     return mensaje_exito
+
+
+@router.put("/usuarios/me/password")
+def cambiar_password_propia(
+    data: CambiarPasswordReq,
+    db: Session = Depends(get_db),
+    usuario_actual: models.Usuario = Depends(obtener_usuario_actual),
+):
+    """Permite a un usuario logueado cambiar su propia contraseña."""
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_actual.id).first()
+
+    if not usuario:
+        return {"ok": False, "message": "Usuario no encontrado."}
+
+    if not verify_password(data.password_actual, usuario.password_hash):
+        return {"ok": False, "message": "La contraseña actual es incorrecta."}
+
+    usuario.password_hash = get_password_hash(data.password_nueva)
+    db.commit()
+
+    return {"ok": True, "message": "Contraseña actualizada exitosamente."}

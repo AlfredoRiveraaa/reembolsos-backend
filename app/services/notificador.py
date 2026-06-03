@@ -326,7 +326,7 @@ class NotificadorCorreo:
                         <p style="margin: 6px 0;"><strong>Usuario:</strong> {correo_destino}</p>
                         <p style="margin: 6px 0;"><strong>Contraseña temporal:</strong> {password_temporal}</p>
                     </div>
-                    <p>Por tu seguridad, te recomendamos cambiar esta contraseña una vez que inicies sesión.</p>
+                    <p>Por tu seguridad, inicia sesión con esta contraseña y cámbiala inmediatamente haciendo clic en tu nombre (en la esquina superior derecha del sistema) y seleccionando <strong>"Cambiar Contraseña"</strong>.</p>
                     <p style="color: #7f8c8d; font-size: 12px; margin-top: 30px; border-top: 1px solid #ecf0f1; padding-top: 10px;">
                         ⚠ Este es un correo automático. Por favor no respondas a este mensaje.
                     </p>
@@ -354,7 +354,7 @@ class NotificadorCorreo:
                         <p style="margin: 6px 0; font-weight: bold;">Se ha generado una nueva contraseña temporal para ti:</p>
                         <p style="font-size: 18px; letter-spacing: 1px; color: #1f4e79; margin: 10px 0;">{password_temporal}</p>
                     </div>
-                    <p>Por motivos de seguridad, te recomendamos iniciar sesión con esta contraseña e inmediatamente cambiarla en tu perfil (contactando a Recursos Humanos por ahora).</p>
+                    <p>Por motivos de seguridad, inicia sesión con esta contraseña y cámbiala inmediatamente haciendo clic en tu nombre (en la esquina superior derecha del sistema) y seleccionando <strong>"Cambiar Contraseña"</strong>.</p>
                     <p>Si no solicitaste este cambio, por favor notifica al administrador del sistema.</p>
                     <p style="color: #7f8c8d; font-size: 12px; margin-top: 30px; border-top: 1px solid #ecf0f1; padding-top: 10px;">
                         ⚠ Este es un correo automático. Por favor no respondas a este mensaje.

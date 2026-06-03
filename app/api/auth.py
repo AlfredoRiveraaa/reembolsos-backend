@@ -112,6 +112,9 @@ def listar_usuarios(
     resultado = []
 
     for u in usuarios:
+        # --- NUEVO: Contamos cuántas solicitudes tiene asignadas/revisadas ---
+        conteo_solicitudes = db.query(models.SolicitudReembolso).filter(models.SolicitudReembolso.revisado_por == u.id).count()
+        
         resultado.append(
             {
                 "id": str(u.id),
@@ -122,6 +125,7 @@ def listar_usuarios(
                 "createdAt": "2026-01-01T00:00:00",
                 "updatedAt": "2026-01-01T00:00:00",
                 "dias_asignados": u.dias_asignados,
+                "solicitudes_revisadas": conteo_solicitudes
             }
         )
     return resultado

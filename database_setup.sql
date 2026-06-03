@@ -12,7 +12,8 @@ CREATE TABLE Usuarios (
     nombre_completo VARCHAR(200) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     rol VARCHAR(50) NOT NULL DEFAULT 'admin_rh',
-    dias_asignados VARCHAR(50) DEFAULT '1,2,3,4,5,6,7'
+    dias_asignados VARCHAR(50) DEFAULT '1,2,3,4,5,6,7',
+    is_active BIT DEFAULT 1
 );
 GO
 

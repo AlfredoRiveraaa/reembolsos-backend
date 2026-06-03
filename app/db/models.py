@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.database import Base
@@ -38,5 +38,6 @@ class Usuario(Base):
     rol = Column(String(50), nullable=False, default="admin_rh")
 
     dias_asignados = Column(String(50), default="1,2,3,4,5,6,7")
+    is_active = Column(Boolean, default=True)
 
     reembolsos_revisados = relationship("SolicitudReembolso", back_populates="revisor")

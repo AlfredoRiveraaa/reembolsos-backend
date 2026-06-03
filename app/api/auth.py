@@ -42,6 +42,14 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail="Correo o contraseña incorrectos",
         )
 
+    # --- REGLA DE BLOQUEO ---
+    if hasattr(usuario, 'is_active') and not usuario.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu cuenta está deshabilitada. Contacta a RRHH."
+        )
+    # ------------------------
+
     if usuario.rol not in ["admin_rh", "trabajador"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -110,7 +118,7 @@ def listar_usuarios(
                 "username": u.correo,
                 "displayName": u.nombre_completo,
                 "role": "admin" if u.rol == "admin_rh" else "trabajador",
-                "isActive": True,
+                "isActive": getattr(u, 'is_active', True),
                 "createdAt": "2026-01-01T00:00:00",
                 "updatedAt": "2026-01-01T00:00:00",
                 "dias_asignados": u.dias_asignados,
@@ -144,6 +152,7 @@ def crear_usuario(
         password_hash=get_password_hash(password_temporal),
         rol="admin_rh" if data.role == "admin" else "trabajador",
         dias_asignados=data.dias_asignados,
+        is_active=data.isActive,
     )
     db.add(nuevo)
     db.commit()
@@ -182,6 +191,7 @@ def actualizar_usuario(
 
     u.rol = "admin_rh" if data.role == "admin" else "trabajador"
     u.dias_asignados = data.dias_asignados
+    u.is_active = data.isActive
 
     db.commit()
     return {"ok": True, "message": "Usuario actualizado correctamente"}
@@ -191,7 +201,7 @@ def actualizar_usuario(
 def eliminar_usuario(
     user_id: int,
     db: Session = Depends(get_db),
-    usuario_actual: models.Usuario = Depends(obtener_usuario_actual),
+    usuario_actual: models.Usuario = Depends(obtener_usuario_actual)
 ):
     if usuario_actual.rol != "admin_rh":
         raise HTTPException(
@@ -200,11 +210,24 @@ def eliminar_usuario(
         )
 
     u = db.query(models.Usuario).filter(models.Usuario.id == user_id).first()
-    if u:
-        db.delete(u)
-        db.commit()
-        return {"ok": True, "message": "Usuario eliminado"}
-    return {"ok": False, "message": "Error al eliminar"}
+    
+    if not u:
+        return {"ok": False, "message": "Usuario no encontrado"}
+
+    # --- CANDADO ESTRICTO ---
+    # Verificamos si el usuario ya firmó/aprobó/rechazó alguna solicitud
+    tiene_historial = db.query(models.SolicitudReembolso).filter(models.SolicitudReembolso.revisado_por == user_id).first()
+    
+    if tiene_historial:
+        return {
+            "ok": False, 
+            "message": "No se puede eliminar porque el usuario tiene un historial de auditoría. Por favor, desactívalo desde la opción Editar."
+        }
+
+    # Si no tiene historial (ej. se acaba de crear y fue un error), procedemos con la baja física
+    db.delete(u)
+    db.commit()
+    return {"ok": True, "message": "Usuario eliminado correctamente"}
 
 
 @router.post("/recuperar-password")

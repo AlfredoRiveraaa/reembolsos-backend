@@ -276,6 +276,17 @@ def actualizar_estatus(
     if not reembolso:
         raise HTTPException(status_code=404, detail="Reembolso no encontrado")
         
+    # --- NUEVO: BLOQUEO OPTIMISTA ---
+    # Si intentan aprobar o rechazar algo que YA fue aprobado o rechazado por alguien más
+    estados_finales = ["VALIDADA", "VALIDADO", "APROBADO", "RECHAZADA", "RECHAZADO"]
+    if nuevo_estatus.upper() in estados_finales:
+        if reembolso.estatus in estados_finales:
+            raise HTTPException(
+                status_code=409, # 409 significa Conflicto
+                detail="¡Alto! Esta solicitud acaba de ser procesada por otro compañero."
+            )
+    # --------------------------------
+
     # Opcional: Validar que quien aprueba es quien inició la revisión
     # if reembolso.revisado_por and reembolso.revisado_por != usuario_actual.id:
     #     raise HTTPException(status_code=403, detail="Solo el administrador que inició la revisión puede aprobarlo.")

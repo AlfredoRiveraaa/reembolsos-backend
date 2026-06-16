@@ -162,6 +162,7 @@ def crear_reembolso(reembolso: schemas.ReembolsoCreate, db: Session = Depends(ge
 async def procesar_factura_xml(
     correo: str = Form(...),
     nombre_solicitante: str = Form(...),
+    id_trabajador: Optional[str] = Form(None),
     archivo: UploadFile = File(...),
     pdfs: List[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
@@ -206,6 +207,7 @@ async def procesar_factura_xml(
         monto=datos["monto_total"],
         correo_solicitante=correo,
         nombre_solicitante=nombre_solicitante,
+        id_trabajador=id_trabajador,
         nombre_proveedor=datos["nombre_emisor"],
         estatus="PENDIENTE",
         forma_pago=datos.get("forma_pago"),

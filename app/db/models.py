@@ -11,6 +11,7 @@ class SolicitudReembolso(Base):
     monto = Column(Numeric(10, 2), nullable=False)
     correo_solicitante = Column(String(100), nullable=False)
     nombre_solicitante = Column(String(200), nullable=True)
+    id_trabajador = Column(String(50), nullable=True)
     nombre_proveedor = Column(String(200), nullable=False)
     estatus = Column(String(20), default="PENDIENTE", nullable=False)
     

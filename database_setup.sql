@@ -24,6 +24,7 @@ CREATE TABLE Solicitudes (
     monto DECIMAL(10, 2) NOT NULL,
     correo_solicitante VARCHAR(100) NOT NULL,
     nombre_solicitante VARCHAR(200),
+    id_trabajador VARCHAR(50) NULL,
     nombre_proveedor VARCHAR(200) NOT NULL,
     estatus VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE',
     forma_pago VARCHAR(50),

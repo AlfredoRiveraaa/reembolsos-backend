@@ -107,10 +107,17 @@ def leer_bandeja_y_procesar(token_api):
                         folio_corto = match_folio.group(1).upper()
                         print(f"Detectado correo de RESPUESTA/ACTUALIZACIÓN para el Folio: {folio_corto}")
                     else:
-                        # Lógica original para correos nuevos
+                    # Lógica original y nueva para correos nuevos
                         partes_asunto = asunto_correo.split("-")
-                        if len(partes_asunto) >= 2:
-                            nombre_solicitante = partes_asunto[-1].strip()
+                    id_trabajador = "" # Iniciamos vacío
+                    
+                    if len(partes_asunto) >= 3:
+                        # Formato: Reembolso - Juan Perez - 12345
+                        nombre_solicitante = partes_asunto[1].strip()
+                        id_trabajador = partes_asunto[2].strip()
+                    elif len(partes_asunto) == 2:
+                        # Formato antiguo (por compatibilidad): Reembolso - Juan Perez
+                        nombre_solicitante = partes_asunto[1].strip()
 
                     # --- EXTRAER ARCHIVOS ---
                     lista_xmls = []
@@ -239,7 +246,11 @@ def leer_bandeja_y_procesar(token_api):
                                 respuesta = requests.post(
                                     API_URL,
                                     files=archivos_para_enviar,
-                                    data={"correo": correo_remitente, "nombre_solicitante": nombre_solicitante},
+                                data={
+                                    "correo": correo_remitente, 
+                                    "nombre_solicitante": nombre_solicitante,
+                                    "id_trabajador": id_trabajador
+                                },
                                     headers={"Authorization": f"Bearer {token_api}"},
                                     timeout=60,
                                 )

@@ -8,6 +8,7 @@ class ReembolsoBase(BaseModel):
     correo_solicitante: str
     nombre_proveedor: str
     estatus: str
+    id_trabajador: Optional[str] = None
 
 class ReembolsoCreate(ReembolsoBase):
     forma_pago: Optional[str] = None

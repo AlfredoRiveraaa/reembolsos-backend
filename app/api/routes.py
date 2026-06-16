@@ -227,7 +227,8 @@ async def procesar_factura_xml(
             uuid_factura=datos["uuid"],
             monto=datos["monto_total"],
             nombre_proveedor=datos["nombre_emisor"],
-            fecha_recepcion=nuevo_reembolso.fecha_recepcion
+            fecha_recepcion=nuevo_reembolso.fecha_recepcion,
+            id_trabajador=id_trabajador
         )
         
         return nuevo_reembolso

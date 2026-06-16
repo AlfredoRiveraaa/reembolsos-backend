@@ -67,7 +67,8 @@ class NotificadorCorreo:
 
     @staticmethod
     def enviar_acuse_recibo(correo_solicitante: str, uuid_factura: str, monto: float, 
-                            nombre_proveedor: str, fecha_recepcion: Optional[datetime] = None) -> bool:
+                            nombre_proveedor: str, fecha_recepcion: Optional[datetime] = None,
+                            id_trabajador: Optional[str] = None) -> bool:
         """
         Envía acuse de recibo cuando se procesa una factura XML.
         
@@ -77,6 +78,7 @@ class NotificadorCorreo:
             monto: Monto de la factura
             nombre_proveedor: Nombre del proveedor/emisor
             fecha_recepcion: Fecha de recepción (por defecto ahora)
+            id_trabajador: ID del empleado (opcional)
             
         Returns:
             True si se envió exitosamente
@@ -85,6 +87,8 @@ class NotificadorCorreo:
             fecha_recepcion = datetime.now()
         
         asunto = f"✓ Acuse de Recibo - Factura {uuid_factura[:8]}"
+        
+        html_id_trabajador = f'<p style="margin: 5px 0;"><strong>ID Trabajador:</strong> {id_trabajador}</p>' if id_trabajador else ''
         
         cuerpo_html = f"""
         <html>
@@ -104,6 +108,7 @@ class NotificadorCorreo:
                         <p style="margin: 5px 0;"><strong>Proveedor/Emisor:</strong> {nombre_proveedor}</p>
                         <p style="margin: 5px 0;"><strong>Monto:</strong> ${monto:,.2f}</p>
                         <p style="margin: 5px 0;"><strong>Fecha de Recepción:</strong> {fecha_recepcion.strftime('%d/%m/%Y %H:%M')}</p>
+                        {html_id_trabajador}
                     </div>
                     
                     <h3 style="color: #2c3e50;">Próximos Pasos:</h3>
@@ -296,7 +301,7 @@ class NotificadorCorreo:
                     <ul style="color: #555; font-size: 14px; line-height: 1.6;">
                         <li>Envía <strong>un solo correo por cada solicitud</strong> de reembolso.</li>
                         <li>El correo debe contener <strong>máximo 3 archivos</strong>: <br>1. XML de la factura <br>2. PDF de la Factura original <br>3. PDF de la Orden Médica.</li>
-                        <li>El asunto debe llevar la palabra <strong>Reembolso</strong> seguida de un guion y tu nombre.</li>
+                        <li>El asunto DEBE llevar la palabra <strong>Reembolso</strong> seguida de un guion, tu nombre y tu ID.</li>
                     </ul>
                     
                     <p style="color: #7f8c8d; font-size: 12px; margin-top: 30px; border-top: 1px solid #ecf0f1; padding-top: 10px;">

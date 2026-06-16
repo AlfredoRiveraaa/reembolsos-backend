@@ -158,12 +158,16 @@ def leer_bandeja_y_procesar(token_api):
 
                     # --- LÓGICA DE DETECCIÓN DE ERRORES AL USUARIO ---
                     if not es_actualizacion:
-                        if not nombre_solicitante:
+                        
+                        # 1. NUEVA VALIDACIÓN ESTRICTA DEL ASUNTO
+                        # Verificamos que existan ambas variables y que la primera palabra contenga "Reembolso"
+                        if not nombre_solicitante or not id_trabajador or "reembolso" not in partes_asunto[0].lower().strip():
                             tiene_error = True
                             razon_error = "Asunto sin formato válido"
-                            mensaje_error_usuario = "El asunto de tu correo no sigue el formato establecido."
-                            instrucciones_usuario = "Asegúrate de escribir la palabra 'Reembolso' seguida de un guion y tu nombre (Ej. Reembolso - Juan Pérez)."
+                            mensaje_error_usuario = f"El asunto de tu correo no sigue el formato estricto. Recibimos: '{asunto_correo}'."
+                            instrucciones_usuario = "El asunto DEBE contener tres partes separadas por guiones: 'Reembolso - Tu Nombre - Tu ID'. (Ejemplo: Reembolso - Juan Pérez - 2026001)."
                             
+                        # 2. Validaciones de archivos (ya las tenías)
                         elif num_xmls == 0:
                             tiene_error = True
                             razon_error = "Falta archivo XML"

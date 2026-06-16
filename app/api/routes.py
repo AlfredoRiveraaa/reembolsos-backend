@@ -188,19 +188,34 @@ async def procesar_factura_xml(
     ruta_carpeta_expediente = None
     pdfs_validos = [p for p in pdfs if p.filename]
     
-    if pdfs_validos:
-        ruta_carpeta_expediente = f"expedientes_pdf/{datos['uuid']}"
+    if pdfs_validos or archivo:
+        # --- NUEVA LÓGICA DE CARPETAS Y RENOMBRAMIENTO ---
+        # 1. Definir carpeta jerárquica: expedientes_pdf / ID_TRABAJADOR / UUID
+        id_trab_folder = id_trabajador if id_trabajador else "SIN_ID"
+        ruta_carpeta_expediente = f"expedientes_pdf/{id_trab_folder}/{datos['uuid']}"
         os.makedirs(ruta_carpeta_expediente, exist_ok=True)
 
+        contador_archivos = 1
+
+        # 2. Guardar y renombrar el XML
         archivo.file.seek(0)
-        ruta_xml = os.path.join(ruta_carpeta_expediente, archivo.filename)
+        _, ext_xml = os.path.splitext(archivo.filename)
+        nombre_xml = f"{id_trab_folder}_archivo_{contador_archivos}{ext_xml or '.xml'}"
+        ruta_xml = os.path.join(ruta_carpeta_expediente, nombre_xml)
+        
         with open(ruta_xml, "wb") as f_xml:
             f_xml.write(archivo.file.read())
         
+        # 3. Guardar y renombrar los PDFs
         for pdf in pdfs_validos:
-            ruta_pdf_final = f"{ruta_carpeta_expediente}/{pdf.filename}"
+            contador_archivos += 1
+            _, ext_pdf = os.path.splitext(pdf.filename)
+            nombre_pdf = f"{id_trab_folder}_archivo_{contador_archivos}{ext_pdf or '.pdf'}"
+            ruta_pdf_final = os.path.join(ruta_carpeta_expediente, nombre_pdf)
+            
             with open(ruta_pdf_final, "wb") as buffer_pdf:
                 shutil.copyfileobj(pdf.file, buffer_pdf)
+        # -------------------------------------------------
     
     nuevo_reembolso = models.SolicitudReembolso(
         uuid=datos["uuid"],
@@ -364,14 +379,26 @@ def actualizar_expediente(
     if not reembolso.link_expediente or not os.path.exists(reembolso.link_expediente):
         raise HTTPException(status_code=404, detail="Carpeta del expediente no encontrada")
 
-    # Guardamos los nuevos archivos en la misma carpeta, agregando el prefijo "NUEVO_"
+    # --- NUEVA LÓGICA DE RENOMBRAMIENTO PARA CORRECCIONES ---
+    # Contamos cuántos archivos hay para continuar la numeración secuencial
+    archivos_existentes = len(os.listdir(reembolso.link_expediente))
+    contador_archivos = archivos_existentes + 1
+    id_trab_folder = reembolso.id_trabajador if reembolso.id_trabajador else "SIN_ID"
+    
     archivos_guardados = 0
     for archivo in archivos:
         if archivo.filename:
-            ruta_archivo = os.path.join(reembolso.link_expediente, f"NUEVO_{archivo.filename}")
+            _, ext = os.path.splitext(archivo.filename)
+            # Ejemplo: NUEVO_2021456_archivo_3.pdf
+            nuevo_nombre = f"NUEVO_{id_trab_folder}_archivo_{contador_archivos}{ext}"
+            ruta_archivo = os.path.join(reembolso.link_expediente, nuevo_nombre)
+            
             with open(ruta_archivo, "wb") as f:
                 f.write(archivo.file.read())
+            
+            contador_archivos += 1
             archivos_guardados += 1
+    # --------------------------------------------------------
 
     if archivos_guardados > 0:
         # Regresamos el estado a PENDIENTE para que RH lo vuelva a revisar

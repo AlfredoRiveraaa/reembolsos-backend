@@ -24,6 +24,7 @@ class SolicitudReembolso(Base):
     fecha_recepcion = Column(DateTime, default=datetime.now)
     
     revisado_por = Column(Integer, ForeignKey("Usuarios.id"), nullable=True)
+    fecha_ultima_revision = Column(DateTime, nullable=True)
     fecha_resolucion = Column(DateTime, nullable=True)
 
     revisor = relationship("Usuario", back_populates="reembolsos_revisados")

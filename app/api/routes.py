@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, BackgroundTasks
 from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -27,6 +28,16 @@ def get_db():
         yield db
     finally:
         db.close()
+
+ESTATUS_ACTIVOS_REVISION = {"PENDIENTE", "EN REVISIÓN", "INFO_SOLICITADA"}
+ESTATUS_CON_FECHA_RESOLUCION = {"APROBADO", "RECHAZADO"}
+ESTATUS_EN_REVISION = {"EN REVISIÓN", "EN REVISION"}
+
+def es_admin_o_rh(usuario: models.Usuario) -> bool:
+    return (getattr(usuario, "rol", "") or "").lower() in {"admin", "admin_rh"}
+
+def normalizar_estatus(estatus: Optional[str]) -> str:
+    return (estatus or "").upper()
 
 # ==========================================
 # ENDPOINTS
@@ -85,6 +96,17 @@ def obtener_reembolso_por_id(
             status_code=404,
             detail="El reembolso solicitado no existe",
         )
+
+    if es_admin_o_rh(usuario_actual) and normalizar_estatus(reembolso.estatus) in ESTATUS_ACTIVOS_REVISION:
+        db.query(models.SolicitudReembolso).filter(
+            models.SolicitudReembolso.id == reembolso_id,
+            models.SolicitudReembolso.estatus.in_(ESTATUS_ACTIVOS_REVISION),
+        ).update(
+            {models.SolicitudReembolso.fecha_ultima_revision: func.sysdatetime()},
+            synchronize_session=False,
+        )
+        db.commit()
+        db.refresh(reembolso)
 
     return reembolso
 
@@ -271,8 +293,16 @@ def iniciar_revision(
     if reembolso.estatus in ["VALIDADO", "RECHAZADO", "APROBADO"]:
         raise HTTPException(status_code=400, detail="El reembolso ya fue procesado y no puede ser revisado nuevamente.")
 
-    reembolso.estatus = "EN REVISIÓN"
-    reembolso.revisado_por = usuario_actual.id
+    db.query(models.SolicitudReembolso).filter(
+        models.SolicitudReembolso.id == reembolso_id
+    ).update(
+        {
+            models.SolicitudReembolso.estatus: "EN REVISIÓN",
+            models.SolicitudReembolso.revisado_por: usuario_actual.id,
+            models.SolicitudReembolso.fecha_ultima_revision: func.sysdatetime(),
+        },
+        synchronize_session=False,
+    )
     
     db.commit()
     db.refresh(reembolso)
@@ -309,15 +339,20 @@ def actualizar_estatus(
     # if reembolso.revisado_por and reembolso.revisado_por != usuario_actual.id:
     #     raise HTTPException(status_code=403, detail="Solo el administrador que inició la revisión puede aprobarlo.")
     
-    reembolso.estatus = nuevo_estatus.upper()
+    estatus_actualizado = nuevo_estatus.upper()
+    reembolso.estatus = estatus_actualizado
     
     # Guardamos los comentarios en la base de datos (reutilizando tu columna)
     if comentarios_rh:
         reembolso.mensaje = comentarios_rh
 
     reembolso.revisado_por = usuario_actual.id
-        
-    reembolso.fecha_resolucion = datetime.now()
+
+    if estatus_actualizado in ESTATUS_EN_REVISION:
+        reembolso.fecha_ultima_revision = func.sysdatetime()
+
+    if estatus_actualizado in ESTATUS_CON_FECHA_RESOLUCION:
+        reembolso.fecha_resolucion = func.sysdatetime()
         
     db.commit()
     db.refresh(reembolso)

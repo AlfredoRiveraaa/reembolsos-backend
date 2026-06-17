@@ -25,8 +25,10 @@ class ReembolsoResponse(ReembolsoBase):
     mensaje_rechazo: Optional[str] = None
     link_expediente: Optional[str] = None
     nombre_solicitante: Optional[str] = None
+    fecha_ultima_revision: Optional[datetime] = None
     fecha_resolucion: Optional[datetime] = None
     mensaje: Optional[str] = None
+    revisado_por: Optional[int] = None
 
     class Config:
         from_attributes = True

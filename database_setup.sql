@@ -35,6 +35,7 @@ CREATE TABLE Solicitudes (
     fecha_recepcion DATETIME DEFAULT GETUTCDATE(),
     revisado_por INT FOREIGN KEY REFERENCES Usuarios(id),
     fecha_resolucion DATETIME
+    fecha_ultima_revision DATETIME2 NULL
 );
 GO
 

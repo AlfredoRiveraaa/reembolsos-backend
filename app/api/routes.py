@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from dotenv import load_dotenv # <--- NUEVA IMPORTACIÓN
 
 from app.db.database import SessionLocal
 from app.db import models
@@ -15,6 +16,11 @@ from app.api import schemas
 from app.core.security import obtener_usuario_actual
 from app.services.extractor_xml import extraer_datos_factura
 from app.services.notificador import NotificadorCorreo
+
+# --- NUEVO: Cargar ruta base ---
+load_dotenv()
+BASE_STORAGE_PATH = os.getenv("STORAGE_PATH", "Expedientes")
+# -------------------------------
 
 router = APIRouter(
     prefix="/api/reembolsos",
@@ -211,15 +217,18 @@ async def procesar_factura_xml(
     pdfs_validos = [p for p in pdfs if p.filename]
     
     if pdfs_validos or archivo:
-        # --- NUEVA LÓGICA DE CARPETAS Y RENOMBRAMIENTO ---
-        # 1. Definir carpeta jerárquica: expedientes_pdf / ID_TRABAJADOR / UUID
         id_trab_folder = id_trabajador if id_trabajador else "SIN_ID"
-        ruta_carpeta_expediente = f"expedientes_pdf/{id_trab_folder}/{datos['uuid']}"
+        
+        # --- LÓGICA DE CARPETAS DIRECTAS ---
+        # Esto generará: C:\...\Reembolsos_Data\Expedientes\12345\UUID
+        ruta_carpeta_expediente = os.path.join(BASE_STORAGE_PATH, id_trab_folder, datos['uuid'])
+        ruta_carpeta_expediente = os.path.normpath(ruta_carpeta_expediente)
+        
         os.makedirs(ruta_carpeta_expediente, exist_ok=True)
 
         contador_archivos = 1
 
-        # 2. Guardar y renombrar el XML
+        # Guardar XML
         archivo.file.seek(0)
         _, ext_xml = os.path.splitext(archivo.filename)
         nombre_xml = f"{id_trab_folder}_archivo_{contador_archivos}{ext_xml or '.xml'}"
@@ -228,7 +237,7 @@ async def procesar_factura_xml(
         with open(ruta_xml, "wb") as f_xml:
             f_xml.write(archivo.file.read())
         
-        # 3. Guardar y renombrar los PDFs
+        # Guardar PDFs
         for pdf in pdfs_validos:
             contador_archivos += 1
             _, ext_pdf = os.path.splitext(pdf.filename)
@@ -237,7 +246,6 @@ async def procesar_factura_xml(
             
             with open(ruta_pdf_final, "wb") as buffer_pdf:
                 shutil.copyfileobj(pdf.file, buffer_pdf)
-        # -------------------------------------------------
     
     nuevo_reembolso = models.SolicitudReembolso(
         uuid=datos["uuid"],

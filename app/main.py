@@ -6,17 +6,14 @@ from app.db import models
 from app.api.auth import router as auth_router
 from app.api.routes import router as reembolsos_router
 
-# Crear tablas en la BD
 models.Base.metadata.create_all(bind=engine)
 
-# Inicializar FastAPI
 app = FastAPI(
     title="API Reembolsos DRH",
     version="1.0.0",
     description="Sistema de Gestión de Reembolsos con notificaciones automáticas"
 )
 
-# Middleware CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:4200"],
@@ -25,16 +22,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==========================================
-# RUTAS
-# ==========================================
-
 app.include_router(reembolsos_router)
 app.include_router(auth_router)
-
-# ==========================================
-# ENDPOINTS - SALUD
-# ==========================================
 
 @app.get("/")
 def read_root():

@@ -81,7 +81,8 @@ def leer_bandeja_y_procesar(token_api):
         lista_ids = mensajes[0].split()
         if not lista_ids:
             return True
-        lista_ids = lista_ids[-5:]  # Procesar últimos 5 correos
+        # Procesar últimos 5 correos para no sobrecargar en caso de avalancha
+        lista_ids = lista_ids[-5:]
 
         for num_id in lista_ids:
             _, datos_msg = mail.fetch(num_id, "(RFC822)")
@@ -95,7 +96,7 @@ def leer_bandeja_y_procesar(token_api):
                     print(f"\nAnalizando correo de: {correo_remitente}")
                     print(f"Asunto: {asunto_correo}")
 
-                    # --- NUEVA LÓGICA DE DETECCIÓN DE FOLIO ---
+                    # Detectar si el correo es una actualización (respuesta a un folio) o uno nuevo.
                     match_folio = re.search(r"Folio:\s*([A-Fa-f0-9]{8})", asunto_correo, re.IGNORECASE)
 
                     es_actualizacion = False
@@ -107,19 +108,15 @@ def leer_bandeja_y_procesar(token_api):
                         folio_corto = match_folio.group(1).upper()
                         print(f"Detectado correo de RESPUESTA/ACTUALIZACIÓN para el Folio: {folio_corto}")
                     else:
-                    # Lógica original y nueva para correos nuevos
                         partes_asunto = asunto_correo.split("-")
                     id_trabajador = "" # Iniciamos vacío
                     
                     if len(partes_asunto) >= 3:
-                        # Formato: Reembolso - Juan Perez - 12345
                         nombre_solicitante = partes_asunto[1].strip()
                         id_trabajador = partes_asunto[2].strip()
                     elif len(partes_asunto) == 2:
-                        # Formato antiguo (por compatibilidad): Reembolso - Juan Perez
                         nombre_solicitante = partes_asunto[1].strip()
 
-                    # --- EXTRAER ARCHIVOS ---
                     lista_xmls = []
                     lista_pdfs = []
                     archivos_invalidos = []
@@ -139,14 +136,12 @@ def leer_bandeja_y_procesar(token_api):
                                 # Si no es ni PDF ni XML, lo guardamos como inválido
                                 archivos_invalidos.append(nombre_archivo)
 
-                    # Contamos cuántos archivos llegaron
                     num_xmls = len(lista_xmls)
                     num_pdfs = len(lista_pdfs)
                     num_invalidos = len(archivos_invalidos)
                     
-                    # Si hay al menos un XML, lo preparamos para el resto del código
-                    nombre_xml = lista_xmls[0][0] if num_xmls > 0 else None
                     contenido_xml = lista_xmls[0][1] if num_xmls > 0 else None
+                    nombre_xml = lista_xmls[0][0] if num_xmls > 0 else None
 
                     procesado_con_exito = False
                     tiene_error = False
@@ -154,20 +149,15 @@ def leer_bandeja_y_procesar(token_api):
                     mensaje_error_usuario = ""
                     instrucciones_usuario = ""
 
-                    num_pdfs = len(lista_pdfs)
-
-                    # --- LÓGICA DE DETECCIÓN DE ERRORES AL USUARIO ---
+                    # Lógica de detección de errores para notificar al usuario
                     if not es_actualizacion:
-                        
-                        # 1. NUEVA VALIDACIÓN ESTRICTA DEL ASUNTO
-                        # Verificamos que existan ambas variables y que la primera palabra contenga "Reembolso"
+                        # Verificamos que el asunto siga el formato: Reembolso - Nombre - ID
                         if not nombre_solicitante or not id_trabajador or "reembolso" not in partes_asunto[0].lower().strip():
                             tiene_error = True
                             razon_error = "Asunto sin formato válido"
                             mensaje_error_usuario = f"El asunto de tu correo no sigue el formato estricto. Recibimos: '{asunto_correo}'."
                             instrucciones_usuario = "El asunto DEBE contener tres partes separadas por guiones: 'Reembolso - Tu Nombre - Tu ID'. (Ejemplo: Reembolso - Juan Pérez - 2026001)."
                             
-                        # 2. Validaciones de archivos (ya las tenías)
                         elif num_xmls == 0:
                             tiene_error = True
                             razon_error = "Falta archivo XML"
@@ -200,12 +190,10 @@ def leer_bandeja_y_procesar(token_api):
                             instrucciones_usuario = "Separa tus solicitudes. Cada correo es una solicitud independiente y solo debe tener el PDF de la factura y el PDF de su receta."
 
                     if not tiene_error:
-                        # --- PREPARAMOS LOS ARCHIVOS (PDFs y XMLs si los hay) ---
                         archivos_para_enviar = []
                         rutas_temp = []
                         archivos_abiertos = []
 
-                        # Agregamos el XML si viene (puede ser un correo nuevo o una corrección de XML)
                         if contenido_xml:
                             ruta_temp_xml = f"temp_{nombre_xml}"
                             rutas_temp.append(ruta_temp_xml)
@@ -213,12 +201,10 @@ def leer_bandeja_y_procesar(token_api):
                                 f.write(contenido_xml)
                             f_abierto = open(ruta_temp_xml, "rb")
                             archivos_abiertos.append(f_abierto)
-
                             # Si es nuevo, FastAPI lo espera como 'archivo'. Si es actualización, como 'archivos'
                             key_xml = "archivos" if es_actualizacion else "archivo"
                             archivos_para_enviar.append((key_xml, (nombre_xml, f_abierto, "application/xml")))
 
-                        # Agregamos los PDFs
                         for i, (nom_pdf, cont_pdf) in enumerate(lista_pdfs):
                             ruta_temp_pdf = f"temp_pdf_{i}.pdf"
                             rutas_temp.append(ruta_temp_pdf)
@@ -235,7 +221,6 @@ def leer_bandeja_y_procesar(token_api):
                             tiene_error = True
                             razon_error = "Respuesta sin adjuntos"
                         else:
-                            # --- ENVIAMOS A LA API CORRESPONDIENTE ---
                             if es_actualizacion:
                                 print(f"Enviando archivos de corrección a la API (Folio {folio_corto})...")
                                 url_destino = f"http://127.0.0.1:8000/api/reembolsos/actualizar-expediente/{folio_corto}"
@@ -265,7 +250,6 @@ def leer_bandeja_y_procesar(token_api):
                             for r in rutas_temp:
                                 os.remove(r)
 
-                            # Verificamos respuesta
                             if respuesta.status_code in [200, 201]:
                                 print(f"API OK: {respuesta.json()}")
                                 procesado_con_exito = True
@@ -283,7 +267,7 @@ def leer_bandeja_y_procesar(token_api):
                                     mensaje_error_usuario = "Los datos dentro de tu archivo XML no pasaron la validación fiscal del sistema."
                                     instrucciones_usuario = "Por favor, verifica que estés enviando un XML válido y vigente."
 
-                    # --- ENVÍO DE FEEDBACK AL TRABAJADOR ---
+                    # Envío de feedback al trabajador en caso de error
                     if tiene_error and mensaje_error_usuario and correo_remitente:
                         print(f"Enviando correo de auto-corrección al trabajador: {razon_error}")
                         try:
@@ -295,7 +279,7 @@ def leer_bandeja_y_procesar(token_api):
                         except Exception as e:
                             print(f"Fallo al enviar correo de feedback: {e}")
 
-                    # --- CLASIFICACIÓN FINAL EN GMAIL ---
+                    # Clasificación final en Gmail
                     if procesado_con_exito:
                         if mail.copy(num_id, "PROCESADOS")[0] == 'OK':
                             mail.store(num_id, '+FLAGS', '\\Deleted')

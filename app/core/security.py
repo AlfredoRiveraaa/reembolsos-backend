@@ -31,14 +31,26 @@ def get_db():
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verifica si una contraseña en texto plano coincide con su hash."""
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
+    """Genera el hash de una contraseña usando bcrypt."""
     return pwd_context.hash(password)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Crea un nuevo token de acceso JWT.
+    
+    Args:
+        data: Diccionario con los datos a incluir en el payload del token (claim).
+        expires_delta: Duración opcional del token. Si no se provee, usa el valor por defecto.
+        
+    Returns:
+        El token JWT codificado como string.
+    """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
         expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -51,6 +63,20 @@ def obtener_usuario_actual(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> models.Usuario:
+    """
+    Dependencia de FastAPI para validar un token JWT y obtener el usuario actual de la BD.
+    
+    Args:
+        token: El token JWT extraído del header 'Authorization: Bearer'.
+        db: Sesión de la base de datos.
+        
+    Raises:
+        HTTPException(401): Si el token es inválido, ha expirado o el usuario no existe.
+        HTTPException(403): Si el rol del usuario no está autorizado.
+        
+    Returns:
+        El objeto del modelo SQLAlchemy del usuario autenticado.
+    """
     credenciales_invalidas = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Token invalido o expirado",

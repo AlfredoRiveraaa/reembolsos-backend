@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from dotenv import load_dotenv # <--- NUEVA IMPORTACIÓN
+from dotenv import load_dotenv
 
 from app.db.database import SessionLocal
 from app.db import models
@@ -19,10 +19,8 @@ from app.core.security import obtener_usuario_actual
 from app.services.extractor_xml import extraer_datos_factura
 from app.services.notificador import NotificadorCorreo
 
-# --- NUEVO: Cargar ruta base ---
 load_dotenv()
 BASE_STORAGE_PATH = os.getenv("STORAGE_PATH", "Expedientes")
-# -------------------------------
 
 router = APIRouter(
     prefix="/api/reembolsos",
@@ -46,10 +44,6 @@ def es_admin_o_rh(usuario: models.Usuario) -> bool:
 
 def normalizar_estatus(estatus: Optional[str]) -> str:
     return (estatus or "").upper()
-
-# ==========================================
-# ENDPOINTS
-# ==========================================
 
 @router.get("", response_model=List[schemas.ReembolsoResponse])
 def obtener_reembolsos(
@@ -248,7 +242,6 @@ async def procesar_factura_xml(
     if pdfs_validos or archivo:
         id_trab_folder = id_trabajador if id_trabajador else "SIN_ID"
         
-        # --- LÓGICA DE CARPETAS DIRECTAS ---
         # Esto generará: C:\...\Reembolsos_Data\Expedientes\12345\UUID
         ruta_carpeta_expediente = os.path.join(BASE_STORAGE_PATH, id_trab_folder, datos['uuid'])
         ruta_carpeta_expediente = os.path.normpath(ruta_carpeta_expediente)
@@ -361,7 +354,6 @@ def actualizar_estatus(
     if not reembolso:
         raise HTTPException(status_code=404, detail="Reembolso no encontrado")
         
-    # --- NUEVO: BLOQUEO OPTIMISTA ---
     # Si intentan aprobar o rechazar algo que YA fue aprobado o rechazado por alguien más
     estados_finales = ["VALIDADA", "VALIDADO", "APROBADO", "RECHAZADA", "RECHAZADO"]
     if nuevo_estatus.upper() in estados_finales:
@@ -370,11 +362,6 @@ def actualizar_estatus(
                 status_code=409, # 409 significa Conflicto
                 detail="¡Alto! Esta solicitud acaba de ser procesada por otro compañero."
             )
-    # --------------------------------
-
-    # Opcional: Validar que quien aprueba es quien inició la revisión
-    # if reembolso.revisado_por and reembolso.revisado_por != usuario_actual.id:
-    #     raise HTTPException(status_code=403, detail="Solo el administrador que inició la revisión puede aprobarlo.")
     
     estatus_actualizado = nuevo_estatus.upper()
     reembolso.estatus = estatus_actualizado
@@ -451,7 +438,6 @@ def actualizar_expediente(
     if not reembolso.link_expediente or not os.path.exists(reembolso.link_expediente):
         raise HTTPException(status_code=404, detail="Carpeta del expediente no encontrada")
 
-    # --- NUEVA LÓGICA DE RENOMBRAMIENTO PARA CORRECCIONES ---
     # Contamos cuántos archivos hay para continuar la numeración secuencial
     archivos_existentes = len(os.listdir(reembolso.link_expediente))
     contador_archivos = archivos_existentes + 1
@@ -470,7 +456,6 @@ def actualizar_expediente(
             
             contador_archivos += 1
             archivos_guardados += 1
-    # --------------------------------------------------------
 
     if archivos_guardados > 0:
         # Regresamos el estado a PENDIENTE para que RH lo vuelva a revisar
@@ -480,8 +465,6 @@ def actualizar_expediente(
 
     return {"status": "success", "message": f"{archivos_guardados} archivos agregados al expediente"}
 
-
-# --- ENDPOINT DE ESTADÍSTICAS (REPORTES) ---
 
 @router.get("/estadisticas/dashboard")
 def obtener_estadisticas_dashboard(

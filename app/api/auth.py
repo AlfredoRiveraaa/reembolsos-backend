@@ -42,13 +42,11 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail="Correo o contraseña incorrectos",
         )
 
-    # --- REGLA DE BLOQUEO ---
     if hasattr(usuario, 'is_active') and not usuario.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tu cuenta está deshabilitada. Contacta a RRHH."
         )
-    # ------------------------
 
     if usuario.rol not in ["admin_rh", "trabajador"]:
         raise HTTPException(
@@ -112,7 +110,7 @@ def listar_usuarios(
     resultado = []
 
     for u in usuarios:
-        # --- NUEVO: Contamos cuántas solicitudes tiene asignadas/revisadas ---
+        # Contamos cuántas solicitudes tiene asignadas/revisadas para la UI
         conteo_solicitudes = db.query(models.SolicitudReembolso).filter(models.SolicitudReembolso.revisado_por == u.id).count()
         
         resultado.append(
@@ -218,7 +216,6 @@ def eliminar_usuario(
     if not u:
         return {"ok": False, "message": "Usuario no encontrado"}
 
-    # --- CANDADO ESTRICTO ---
     # Verificamos si el usuario ya firmó/aprobó/rechazó alguna solicitud
     tiene_historial = db.query(models.SolicitudReembolso).filter(models.SolicitudReembolso.revisado_por == user_id).first()
     

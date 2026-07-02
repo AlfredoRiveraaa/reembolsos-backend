@@ -2,9 +2,11 @@ import os
 import shutil
 import mimetypes
 import uuid
+import io
+import zipfile
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -160,6 +162,33 @@ def obtener_archivo_especifico(
         media_type = "application/octet-stream"
 
     return FileResponse(file_path, media_type=media_type, filename=nombre_archivo)
+
+@router.get("/{id}/expediente/zip")
+def descargar_expediente_zip(id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(obtener_usuario_actual)):
+    # 1. Buscar la solicitud
+    reembolso = db.query(models.SolicitudReembolso).filter(models.SolicitudReembolso.id == id).first()
+    
+    if not reembolso or not reembolso.link_expediente or not os.path.exists(reembolso.link_expediente):
+        raise HTTPException(status_code=404, detail="Expediente no encontrado o carpeta inexistente")
+
+    # 2. Crear un archivo ZIP en memoria (sin guardarlo en el disco duro)
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+        for root, _, files in os.walk(reembolso.link_expediente):
+            for file in files:
+                file_path = os.path.join(root, file)
+                # arcname=file asegura que dentro del ZIP no se creen carpetas con toda la ruta de Windows
+                zip_file.write(file_path, arcname=file)
+                
+    # 3. Preparar el buffer para ser leído desde el principio
+    zip_buffer.seek(0)
+    
+    # 4. Retornar el archivo con el nombre formateado
+    nombre_zip = f"Expediente_{reembolso.id_trabajador or 'DRH'}_{reembolso.uuid[-8:]}.zip"
+    headers = {'Content-Disposition': f'attachment; filename="{nombre_zip}"'}
+    
+    return StreamingResponse(zip_buffer, media_type="application/x-zip-compressed", headers=headers)
 
 @router.post("", response_model=schemas.ReembolsoResponse, status_code=201)
 def crear_reembolso(reembolso: schemas.ReembolsoCreate, db: Session = Depends(get_db)):
